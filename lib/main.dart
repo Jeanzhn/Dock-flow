@@ -30,6 +30,7 @@ Future<void> testarConexaoBrenner(BuildContext context) async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
     );
+
   }
 }
 void main() {
