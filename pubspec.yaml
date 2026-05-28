@@ -1,5 +1,5 @@
 name: dock_flow
-description: "A new Flutter project."
+description: "Sistema de gestão de docas e fila de caminhões"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -42,6 +42,7 @@ dependencies:
   flutter_map: ^8.3.0
   latlong2: ^0.9.1
   firebase_auth: ^6.5.1
+  provider: ^6.1.2
 
 dev_dependencies:
   flutter_test:
