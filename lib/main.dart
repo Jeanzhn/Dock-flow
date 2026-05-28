@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'firebase_options.dart'; 
 
 void main() async {
+  // Inicialização assíncrona: Garante que os componentes visuais do Flutter 
+  // estejam prontos antes de conectar com serviços externos (Firebase).
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  // INICIALIZAÇÃO DO FIREBASE:
+  // Utiliza as chaves de API geradas automaticamente pelo FlutterFire CLI 
+  // no arquivo firebase_options.dart, adaptando-se à plataforma atual (Android/iOS/Web).
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const MeuAppLogistico());
 }
 
@@ -22,6 +32,9 @@ class MeuAppLogistico extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// TELA INICIAL: Roteamento de Perfis
+// ============================================================================
 class TelaSelecaoPerfil extends StatelessWidget {
   const TelaSelecaoPerfil({Key? key}) : super(key: key);
 
@@ -56,7 +69,7 @@ class TelaSelecaoPerfil extends StatelessWidget {
 }
 
 // ============================================================================
-// TELA DO OPERADOR / CHEFE (Consome a fila_descarga ordenando por dh_passagem_prf)
+// TELA DO OPERADOR / CHEFE: Painel de Controle Reativo
 // ============================================================================
 class TelaChefe extends StatelessWidget {
   const TelaChefe({Key? key}) : super(key: key);
@@ -68,15 +81,19 @@ class TelaChefe extends StatelessWidget {
         title: const Text('Painel Operacional - Fila'),
         backgroundColor: Colors.blueGrey,
       ),
+      // STREAMBUILDER: O coração da reatividade do app.
+      // Em vez de fazer uma consulta estática (SELECT), ele abre um canal contínuo
+      // com o Firestore. Qualquer alteração no banco atualiza a tela automaticamente.
       body: StreamBuilder<QuerySnapshot>(
-        // Reflete o INDEX composto do MySQL: dh_passagem_prf ASC e is_impossibilitado
         stream: FirebaseFirestore.instance
             .collection('fila_descarga')
-            .where('is_impossibilitado', isEqualTo: false)
-            .where('dh_chamada', isNull: true)
-            .orderBy('dh_passagem_prf', descending: false)
+            // Filtros que espelham a regra de negócio da fila logística:
+            .where('is_impossibilitado', isEqualTo: false) // Ignora veículos com problemas
+            .where('dh_chamada', isNull: true)             // Pega apenas quem ainda NÃO foi chamado
+            .orderBy('dh_passagem_prf', descending: false) // Ordena do mais antigo para o mais novo (FIFO)
             .snapshots(),
         builder: (context, snapshot) {
+          // Tratamento de estados da conexão
           if (snapshot.hasError) {
             return Center(child: Text('Erro ao carregar a fila: ${snapshot.error}'));
           }
@@ -104,11 +121,11 @@ class TelaChefe extends StatelessWidget {
                   subtitle: Text('ID Ordem: ${dados['id_ordem']}'),
                   trailing: ElevatedButton(
                     onPressed: () async {
-                      // Transação simulando o UPDATE do SQL em cascata ou paralelo
                       String idOrdem = dados['id_ordem'];
                       String idOperadorLogado = "OPERADOR_EXEMPLO_ID"; 
 
-                      // 1. Atualiza o status na tabela de Filas
+                      // TRANSAÇÃO DE ESTADO (Simulando UPDATE em cascata do MySQL)
+                      // 1. Registra na fila que o motorista foi chamado (preenche a datahora e o operador)
                       await FirebaseFirestore.instance
                           .collection('fila_descarga')
                           .doc(itemFila.id)
@@ -117,7 +134,7 @@ class TelaChefe extends StatelessWidget {
                         'id_operador': idOperadorLogado,
                       });
 
-                      // 2. Atualiza o status na tabela de Ordens de Descarga
+                      // 2. Atualiza o status geral da ordem para controle
                       await FirebaseFirestore.instance
                           .collection('ordens_descarga')
                           .doc(idOrdem)
@@ -137,7 +154,7 @@ class TelaChefe extends StatelessWidget {
 }
 
 // ============================================================================
-// TELA DO MOTORISTA (Gera Ordem de Descarga e Entra na Fila)
+// TELA DO MOTORISTA: Entrada de Dados e Escuta Ativa
 // ============================================================================
 class TelaMotorista extends StatefulWidget {
   const TelaMotorista({Key? key}) : super(key: key);
@@ -150,7 +167,7 @@ class _TelaMotoristaState extends State<TelaMotorista> {
   bool _enviando = false;
   String _status = 'Pendente';
   
-  // UID fixo de teste representando o Motorista logado
+  // Variáveis mockadas para testes de inserção
   final String _idMotoristaLogado = "USER_MOTO_VAL_123"; 
   final String _idVeiculoLogado = "VEICULO_VAL_ABC"; 
   String? _idOrdemCriada;
@@ -162,7 +179,7 @@ class _TelaMotoristaState extends State<TelaMotorista> {
     });
 
     try {
-      // 1. Garante permissões de localização (Simulando passagem no posto/PRF)
+      // VALIDAÇÃO DE HARDWARE: Garante que o GPS está ativo e com permissão
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) throw Exception('GPS desativado.');
 
@@ -172,7 +189,8 @@ class _TelaMotoristaState extends State<TelaMotorista> {
         if (permission == LocationPermission.denied) throw Exception('Sem permissão de GPS.');
       }
 
-      // 2. Criar registro na coleção 'ordens_descarga' (Equivalente ao INSERT INTO ordens_descarga)
+      // INSERÇÃO DUPLA (Simulando o comportamento de tabelas normalizadas do SQL)
+      // 1. Cria a Ordem de Descarga principal
       DocumentReference novaOrdemRef = await FirebaseFirestore.instance
           .collection('ordens_descarga')
           .add({
@@ -184,7 +202,8 @@ class _TelaMotoristaState extends State<TelaMotorista> {
 
       _idOrdemCriada = novaOrdemRef.id;
 
-      // 3. Inserir na coleção 'fila_descarga' usando o ID da ordem como chave (Equivalente ao INSERT INTO fila_descarga)
+      // 2. Insere o registro na Fila de Descarga usando o mesmo ID gerado acima 
+      // para criar um relacionamento 1:1 estrito entre Ordem e Fila.
       await FirebaseFirestore.instance
           .collection('fila_descarga')
           .doc(_idOrdemCriada)
@@ -192,7 +211,7 @@ class _TelaMotoristaState extends State<TelaMotorista> {
         'id_ordem': _idOrdemCriada,
         'id_operador': null,
         'nome_motorista': 'Motorista Teste Região',
-        'dh_passagem_prf': FieldValue.serverTimestamp(), // Marcação de tempo da entrada
+        'dh_passagem_prf': FieldValue.serverTimestamp(), 
         'is_impossibilitado': false,
         'dh_chamada': null,
       });
@@ -201,6 +220,7 @@ class _TelaMotoristaState extends State<TelaMotorista> {
         _status = 'Confirmado na Fila de Descarga!';
       });
 
+      // Ativa o ouvinte para o motorista saber quando for a vez dele
       _iniciarEscutaDeChamada();
 
     } catch (e) {
@@ -214,6 +234,8 @@ class _TelaMotoristaState extends State<TelaMotorista> {
     }
   }
 
+  // ESCUTA ATIVA DO MOTORISTA:
+  // Observa especificamente o próprio documento na coleção fila_descarga.
   void _iniciarEscutaDeChamada() {
     if (_idOrdemCriada == null) return;
 
@@ -224,6 +246,7 @@ class _TelaMotoristaState extends State<TelaMotorista> {
         .listen((DocumentSnapshot snapshot) {
       if (snapshot.exists) {
         var dados = snapshot.data() as Map<String, dynamic>;
+        // Se o operador do outro lado da tela preencher este campo, o alerta dispara
         if (dados['dh_chamada'] != null) {
           _mostrarPopupSuaVez();
         }

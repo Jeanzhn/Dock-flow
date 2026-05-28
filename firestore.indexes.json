@@ -1,0 +1,28 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ordens_descarga",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "impossibilitado_descarga",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status_operacional",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dh_passagem_prf",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    }
+  ],
+  "fieldOverrides": []
+}

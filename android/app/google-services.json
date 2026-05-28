@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "699017081583",
+    "project_id": "dockflow-cd84e",
+    "storage_bucket": "dockflow-cd84e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699017081583:android:de062f1996807b3c34a11a",
+        "android_client_info": {
+          "package_name": "com.example.dock_flow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDffXVSrmWj7UIUMehye6W66Pu9_T-zQrI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
