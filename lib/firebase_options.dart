@@ -85,4 +85,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'dockflow-cd84e.firebasestorage.app',
     measurementId: 'G-PQSTS440XM',
   );
+
 }
