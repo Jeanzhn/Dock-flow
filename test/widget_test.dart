@@ -1,30 +1,22 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Importa o seu arquivo main.dart
 import 'package:dock_flow/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Teste de inicialização da Tela de Perfil', (WidgetTester tester) async {
+    // 1. Constrói o seu app logístico
+    await tester.pumpWidget(const MeuAppLogistico());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // 2. Verifica se a barra superior "Selecione seu Perfil" apareceu
+    expect(find.text('Selecione seu Perfil'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
+    // 3. Verifica se os botões estão na tela
+    expect(find.text('Entrar como OPERADOR / CHEFE'), findsOneWidget);
+    expect(find.text('Entrar como MOTORISTA'), findsOneWidget);
+    
+    // 4. Verifica que não tem nenhum contador antigo perdido na tela
     expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
   });
 }

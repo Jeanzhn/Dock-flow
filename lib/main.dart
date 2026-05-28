@@ -1,340 +1,285 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:mysql1/mysql1.dart';
 
-// 1. Modifiquei a função para retornar uma mensagem que podemos mostrar na tela
-Future<void> testarConexaoBrenner(BuildContext context) async {
-  try {
-    final configuracao = ConnectionSettings(
-      host: '100.112.22.63', // <-- MUDAR AQUI (ex: '100.x.x.x')
-      port: 3306,
-      user: 'root',
-      password: 'qwe123@',
-      db: 'BJORDAN55'
-    );
-  
-    final conexao = await MySqlConnection.connect(configuracao);
-    print('Conectado com sucesso ao banco do Brenner!');
-    
-    // Mostra um aviso na tela do app dizendo que deu certo!
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Conectado ao banco com sucesso! ✅'), backgroundColor: Colors.green),
-    );
-
-    await conexao.close();
-  } catch (e) {
-    print('Erro na conexão: $e');
-    // Mostra o erro na tela caso falhe
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
-    );
-  }
-}
-void main() {
-  WidgetsFlutterBinding.ensureInitialized(); // Adicione esta linha por segurança!
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const MeuAppLogistico());
 }
 
-enum UserType { admin, motorista, operador }
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MeuAppLogistico extends StatelessWidget {
+  const MeuAppLogistico({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DockFlow',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      home: const LoginPage(),
+      title: 'App de Fila - Docas',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const TelaSelecaoPerfil(),
     );
   }
 }
 
-// ================= LOGIN =================
-
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  UserType? selectedType;
-
-  void login() {
-    if (selectedType == null) return;
-
-    switch (selectedType!) {
-      case UserType.admin:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPage()));
-        break;
-      case UserType.motorista:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const MotoristaPage()));
-        break;
-      case UserType.operador:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const OperadorPage()));
-        break;
-    }
-  }
+class TelaSelecaoPerfil extends StatelessWidget {
+  const TelaSelecaoPerfil({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0A3D62), Color(0xFF3C6382)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(25),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text("Login do Sistema",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 20),
-
-                  buildOption("Administrador", UserType.admin),
-                  buildOption("Motorista", UserType.motorista),
-                  buildOption("Operador", UserType.operador),
-
-                  const SizedBox(height: 20),
-
-                 ElevatedButton(
-                    onPressed: login,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    child: const Text("Entrar"),
-                  ),
-                  
-                  const SizedBox(height: 15),
-
-                  // NOVO BOTÃO PARA TESTAR O BANCO DO DOCKFLOW
-                  OutlinedButton.icon(
-                    onPressed: () => testarConexaoBrenner(context), // <-- A MÁGICA ACONTECE AQUI
-                    icon: const Icon(Icons.storage),
-                    label: const Text("Testar Conexão com Banco do Brenner"),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                  )
-                ],
+      appBar: AppBar(title: const Text('Selecione seu Perfil')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TelaChefe()),
               ),
+              child: const Text('Entrar como OPERADOR / CHEFE'),
             ),
-          ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TelaMotorista()),
+              ),
+              child: const Text('Entrar como MOTORISTA'),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  Widget buildOption(String title, UserType type) {
-    return RadioListTile<UserType>(
-      value: type,
-      groupValue: selectedType,
-      onChanged: (value) {
-        setState(() => selectedType = value);
-      },
-      title: Text(title),
-    );
-  }
 }
 
-// ================= ADMIN =================
-
-class AdminPage extends StatelessWidget {
-  const AdminPage({super.key});
+// ============================================================================
+// TELA DO OPERADOR / CHEFE (Consome a fila_descarga ordenando por dh_passagem_prf)
+// ============================================================================
+class TelaChefe extends StatelessWidget {
+  const TelaChefe({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Administrador")),
-      body: const Center(
-        child: Text("Controle total do sistema"),
+      appBar: AppBar(
+        title: const Text('Painel Operacional - Fila'),
+        backgroundColor: Colors.blueGrey,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        // Reflete o INDEX composto do MySQL: dh_passagem_prf ASC e is_impossibilitado
+        stream: FirebaseFirestore.instance
+            .collection('fila_descarga')
+            .where('is_impossibilitado', isEqualTo: false)
+            .where('dh_chamada', isNull: true)
+            .orderBy('dh_passagem_prf', descending: false)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Erro ao carregar a fila: ${snapshot.error}'));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final filaDocs = snapshot.data!.docs;
+
+          if (filaDocs.isEmpty) {
+            return const Center(child: Text('Nenhum veículo aguardando na fila.'));
+          }
+
+          return ListView.builder(
+            itemCount: filaDocs.length,
+            itemBuilder: (context, index) {
+              var itemFila = filaDocs[index];
+              var dados = itemFila.data() as Map<String, dynamic>;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: ListTile(
+                  leading: CircleAvatar(child: Text('${index + 1}')),
+                  title: Text(dados['nome_motorista'] ?? 'Motorista Não Identificado'),
+                  subtitle: Text('ID Ordem: ${dados['id_ordem']}'),
+                  trailing: ElevatedButton(
+                    onPressed: () async {
+                      // Transação simulando o UPDATE do SQL em cascata ou paralelo
+                      String idOrdem = dados['id_ordem'];
+                      String idOperadorLogado = "OPERADOR_EXEMPLO_ID"; 
+
+                      // 1. Atualiza o status na tabela de Filas
+                      await FirebaseFirestore.instance
+                          .collection('fila_descarga')
+                          .doc(itemFila.id)
+                          .update({
+                        'dh_chamada': FieldValue.serverTimestamp(),
+                        'id_operador': idOperadorLogado,
+                      });
+
+                      // 2. Atualiza o status na tabela de Ordens de Descarga
+                      await FirebaseFirestore.instance
+                          .collection('ordens_descarga')
+                          .doc(idOrdem)
+                          .update({'status_operacional': 'CHAMADO'});
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    child: const Text('Chamar'),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 }
 
-// ================= MOTORISTA =================
-
-class MotoristaPage extends StatefulWidget {
-  const MotoristaPage({super.key});
+// ============================================================================
+// TELA DO MOTORISTA (Gera Ordem de Descarga e Entra na Fila)
+// ============================================================================
+class TelaMotorista extends StatefulWidget {
+  const TelaMotorista({Key? key}) : super(key: key);
 
   @override
-  State<MotoristaPage> createState() => _MotoristaPageState();
-}
+  _TelaMotoristaState createState() => _TelaMotoristaState();
+} 
 
-class _MotoristaPageState extends State<MotoristaPage> {
-  final TextEditingController placaController = TextEditingController();
-  final TextEditingController modeloController = TextEditingController();
+class _TelaMotoristaState extends State<TelaMotorista> {
+  bool _enviando = false;
+  String _status = 'Pendente';
   
-  String locationText = "Aguardando captura...";
-  Position? currentPosition;
-  bool isLoading = false; // Para mostrar a bolinha girando enquanto busca o GPS
+  // UID fixo de teste representando o Motorista logado
+  final String _idMotoristaLogado = "USER_MOTO_VAL_123"; 
+  final String _idVeiculoLogado = "VEICULO_VAL_ABC"; 
+  String? _idOrdemCriada;
 
-  @override
-  void dispose() {
-    placaController.dispose();
-    modeloController.dispose();
-    super.dispose();
-  }
-
-  Future<void> getLocation() async {
+  Future<void> _darEntradaNaFila() async {
     setState(() {
-      isLoading = true;
-      locationText = "Buscando satélites...";
+      _enviando = true;
+      _status = 'Obtendo dados operacionais...';
     });
 
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      setState(() {
-        isLoading = false;
-        locationText = "Ative o GPS do tablet!";
-      });
-      return;
-    }
+    try {
+      // 1. Garante permissões de localização (Simulando passagem no posto/PRF)
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw Exception('GPS desativado.');
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        setState(() {
-          isLoading = false;
-          locationText = "Permissão negada";
-        });
-        return;
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) throw Exception('Sem permissão de GPS.');
       }
+
+      // 2. Criar registro na coleção 'ordens_descarga' (Equivalente ao INSERT INTO ordens_descarga)
+      DocumentReference novaOrdemRef = await FirebaseFirestore.instance
+          .collection('ordens_descarga')
+          .add({
+        'id_motorista': _idMotoristaLogado,
+        'id_veiculo': _idVeiculoLogado,
+        'status_operacional': 'NA_FILA',
+        'data_criacao': FieldValue.serverTimestamp(),
+      });
+
+      _idOrdemCriada = novaOrdemRef.id;
+
+      // 3. Inserir na coleção 'fila_descarga' usando o ID da ordem como chave (Equivalente ao INSERT INTO fila_descarga)
+      await FirebaseFirestore.instance
+          .collection('fila_descarga')
+          .doc(_idOrdemCriada)
+          .set({
+        'id_ordem': _idOrdemCriada,
+        'id_operador': null,
+        'nome_motorista': 'Motorista Teste Região',
+        'dh_passagem_prf': FieldValue.serverTimestamp(), // Marcação de tempo da entrada
+        'is_impossibilitado': false,
+        'dh_chamada': null,
+      });
+
+      setState(() {
+        _status = 'Confirmado na Fila de Descarga!';
+      });
+
+      _iniciarEscutaDeChamada();
+
+    } catch (e) {
+      setState(() {
+        _status = 'Erro na operação: $e';
+      });
+    } finally {
+      setState(() {
+        _enviando = false;
+      });
     }
+  }
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+  void _iniciarEscutaDeChamada() {
+    if (_idOrdemCriada == null) return;
 
-    setState(() {
-      currentPosition = position;
-      locationText = "Posição Confirmada!";
-      isLoading = false;
+    FirebaseFirestore.instance
+        .collection('fila_descarga')
+        .doc(_idOrdemCriada)
+        .snapshots()
+        .listen((DocumentSnapshot snapshot) {
+      if (snapshot.exists) {
+        var dados = snapshot.data() as Map<String, dynamic>;
+        if (dados['dh_chamada'] != null) {
+          _mostrarPopupSuaVez();
+        }
+      }
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Painel do Motorista")),
-      body: Column(
-        children: [
-          // PARTE SUPERIOR: Formulário
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: placaController,
-                  decoration: const InputDecoration(labelText: "Placa do Veículo"),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  onPressed: isLoading ? null : getLocation,
-                  icon: isLoading 
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Icon(Icons.satellite_alt),
-                  label: Text(isLoading ? "Localizando..." : "Capturar Minha Posição"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[800], foregroundColor: Colors.white),
-                ),
-              ],
+  void _mostrarPopupSuaVez() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Painel de Convocação', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          content: const Text('Sua ordem de descarga foi chamada! Dirija-se imediatamente à doca demarcada.'),
+          actions: <Widget>[
+            ElevatedButton(
+              child: const Text('Confirmar Ciente'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
             ),
-          ),
-          
-          // PARTE INFERIOR: O Mapa Dinâmico
-          Expanded(
-            child: currentPosition == null
-                ? Center(
-                    child: Text(
-                      locationText,
-                      style: const TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                  )
-                : FlutterMap(
-                    options: MapOptions(
-                      // Centraliza o mapa exatamente onde o motorista está
-                      initialCenter: LatLng(currentPosition!.latitude, currentPosition!.longitude),
-                      initialZoom: 16.0, // Zoom nível rua
-                    ),
-                    children: [
-                      // Desenha as ruas (Usando OpenStreetMap gratuito)
-                      TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.dockflow.app',
-                      ),
-                      // Desenha o pino do caminhão
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(currentPosition!.latitude, currentPosition!.longitude),
-                            width: 60,
-                            height: 60,
-                            child: const Icon(
-                              Icons.local_shipping, // Ícone de caminhão
-                              color: Colors.red,
-                              size: 45,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-          ),
-          
-          // BOTÃO DE ENVIO
-          if (currentPosition != null)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: () {
-                  print("Enviando para backend/local -> Placa: ${placaController.text} | Lat: ${currentPosition!.latitude} | Lng: ${currentPosition!.longitude}");
-                },
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 55),
-                  backgroundColor: Colors.green[700],
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text("Confirmar e Avisar Pátio", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ),
-            ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
-}
-
-// ================= OPERADOR =================
-
-class OperadorPage extends StatelessWidget {
-  const OperadorPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Operador")),
-      body: const Center(
-        child: Text("Gerenciar fila e chamadas"),
+      appBar: AppBar(title: const Text('Área do Motorista')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _status,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton.icon(
+                onPressed: _enviando ? null : _darEntradaNaFila,
+                icon: _enviando 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : const Icon(Icons.local_shipping),
+                label: const Text('Dar Entrada via PRF e Entrar na Fila'),
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
