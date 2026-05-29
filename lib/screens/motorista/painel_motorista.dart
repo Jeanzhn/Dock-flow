@@ -23,8 +23,12 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   String? _tipoCargaSelecionado;
   bool _loading = false;
   
-  // Variável local para controlar se o motorista fechou a tela de sucesso e quer uma nova viagem
+  // Controle de estados de alternância das telas
   bool _exibirFormularioNovaViagem = false;
+  bool _modalAberto = false; // Trava de segurança para o pop-up do chamado
+  
+  // Guarda a referência da viagem concluída para a tela de recibo
+  ViagemModel? _ultimaViagemConcluida;
 
   final _origens = ['Pedra Branca', 'Macapá', 'Laranjal do Jari', 'Oiapoque', 'Porto Grande'];
   final _tiposCarga = ['Minério', 'Grãos', 'Madeira', 'Combustível', 'Container', 'Geral'];
@@ -93,7 +97,9 @@ class _PainelMotoristaState extends State<PainelMotorista> {
       setState(() {
         _origemSelecionada = null;
         _tipoCargaSelecionado = null;
-        _exibirFormularioNovaViagem = false; // Reseta o controle ao criar
+        _exibirFormularioNovaViagem = false;
+        _modalAberto = false; 
+        _ultimaViagemConcluida = null;
       });
 
       if (mounted) {
@@ -131,6 +137,24 @@ class _PainelMotoristaState extends State<PainelMotorista> {
           break;
           
         case 'CONCLUIDO':
+          setState(() {
+            _ultimaViagemConcluida = ViagemModel(
+              id: viagem.id,
+              motoristaEmail: viagem.motoristaEmail,
+              motoristaNome: viagem.motoristaNome,
+              placaVeiculo: viagem.placaVeiculo,
+              origem: viagem.origem,
+              destino: viagem.destino,
+              tipoCarga: viagem.tipoCarga,
+              statusOperacional: StatusOperacional.CONCLUIDO,
+              dhInicio: viagem.dhInicio,
+              dhCarregamento: viagem.dhCarregamento,
+              dhEntradaFila: viagem.dhEntradaFila,
+              dhChamada: viagem.dhChamada,
+              dhConclusao: DateTime.now(),
+            );
+          });
+          
           await _service.atualizarStatus(viagem.id, StatusOperacional.CONCLUIDO,
               extras: {'dhConclusao': DateTime.now()});
           break;
@@ -155,6 +179,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   }
 
   void _mostrarModalChamado(BuildContext context, ViagemModel viagem) {
+    _modalAberto = true; 
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -178,7 +203,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                 Text(
                   'O operador está chamando você para a doca de descarga. Dirija-se imediatamente ao local.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
+                  style: const TextStyle(color: const Color(0xFF495057), fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -190,8 +215,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: () {
-                      Navigator.pop(context);
-                      _executarAcao(viagem, 'CONCLUIDO'); 
+                      Navigator.pop(context); 
                     },
                     child: const Text('Entendido', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
@@ -249,27 +273,29 @@ class _PainelMotoristaState extends State<PainelMotorista> {
 
           final viagem = snap.data;
 
-          // GATILHO DO POP-UP: Se o operador chamou e o pop-up ainda não foi resolvido
-          if (viagem != null && viagem.statusOperacional == StatusOperacional.CHAMADO) {
+          if (viagem != null && viagem.statusOperacional == StatusOperacional.CHAMADO && !_modalAberto) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _mostrarModalChamado(context, viagem);
             });
+          }
+
+          // Lógica segura de renderização das telas alternativas
+          Widget telaExibida;
+          if (_ultimaViagemConcluida != null && !_exibirFormularioNovaViagem) {
+            telaExibida = _buildTelaSucessoConcluido(_ultimaViagemConcluida!, cs);
+          } else if (viagem == null || _exibirFormularioNovaViagem) {
+            telaExibida = _buildNovaViagem(cs);
+          } else {
+            telaExibida = _buildViagemAtiva(viagem, cs);
           }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                // LOGICA DE ALTERNAÇÃO DE TELAS:
-                if (viagem == null || _exibirFormularioNovaViagem)
-                  _buildNovaViagem(cs)
-                else if (viagem.statusOperacional == StatusOperacional.CONCLUIDO)
-                  _buildTelaSucessoConcluido(viagem, cs)
-                else
-                  _buildViagemAtiva(viagem, cs),
-                  
+                telaExibida,
                 const SizedBox(height: 20),
-                _buildHistoricoFake(viagem), // Injeta a viagem atualizada para atualizar o histórico dinamicamente
+                _buildHistoricoReal(), // Histórico Real e cumulativo do banco de dados
               ],
             ),
           );
@@ -403,7 +429,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     );
   }
 
-  // NOVA TELA PEDIDA: Mostra o recibo final de sucesso e libera um botão para nova viagem
   Widget _buildTelaSucessoConcluido(ViagemModel viagem, ColorScheme cs) {
     return Card(
       color: Colors.white,
@@ -439,7 +464,8 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                 ),
                 onPressed: () {
                   setState(() {
-                    _exibirFormularioNovaViagem = true; // Força a visualização do formulário inicial
+                    _ultimaViagemConcluida = null; 
+                    _exibirFormularioNovaViagem = true; 
                   });
                 },
                 icon: const Icon(Icons.add_road, color: Color(0xFF00875A), size: 18),
@@ -550,9 +576,9 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             decoration: BoxDecoration(color: const Color(0xFFFFF9DB), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFFF3BF))),
             child: const Column(
               children: [
-                Text('Aguardando chamada do operador...', style: TextStyle(color: Color(0xFFF59F00), fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('Aguardando chamado do operador...', style: TextStyle(color: Color(0xFFF59F00), fontWeight: FontWeight.bold, fontSize: 14)),
                 SizedBox(height: 4),
-                Text('Sua viagem está ativa na fila virtual', style: TextStyle(color: Colors.black54, fontSize: 12)),
+                Text('Sua viagem está active na fila virtual', style: TextStyle(color: Colors.black54, fontSize: 12)),
               ],
             ),
           ),
@@ -635,10 +661,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     return const SizedBox();
   }
 
-  Widget _buildHistoricoFake(ViagemModel? viagemAtual) {
-    // Se a viagem atual acabou de ser concluída, vamos usar os dados reais dela no topo do histórico
-    final bool usarDadosReais = viagemAtual != null && viagemAtual.statusOperacional == StatusOperacional.CONCLUIDO;
-
+  Widget _buildHistoricoReal() {
     return Card(
       color: Colors.white,
       elevation: 0,
@@ -651,75 +674,75 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             const Row(children: [
               Icon(Icons.history, color: Colors.black54, size: 20),
               SizedBox(width: 8),
-              Text('Histórico', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+              Text('Histórico de Viagens', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
             ]),
             const SizedBox(height: 16),
             
-            // Item 1 do Histórico: Dinâmico baseado na conclusão atual
-            Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        usarDadosReais ? '${viagemAtual.origem} → ${viagemAtual.destino}' : 'Laranjal do Jari → Santana-AP', 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        usarDadosReais ? '${viagemAtual.placaVeiculo}  •  ${_formatarData(viagemAtual.dhConclusao).substring(0,8)}' : 'ATRFAFA  •  28/05/26', 
-                        style: const TextStyle(color: Colors.black38, fontSize: 12, fontFamily: 'monospace')
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, color: Color(0xFF0CA678), size: 14),
-                        SizedBox(width: 4),
-                        Text('Concluído', style: TextStyle(color: Color(0xFF0CA678), fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
+            StreamBuilder<List<ViagemModel>>(
+              stream: _service.streamHistoricoConcluido(_user.email!),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                  );
+                }
 
-            // Item 2 do Histórico: Elemento estático para compor a lista do print
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Pedra Branca → Santana-AP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      SizedBox(height: 4),
-                      Text('EW4-EMS  •  28/05/26', style: TextStyle(color: Colors.black38, fontSize: 12, fontFamily: 'monospace')),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.check_circle_outline, color: Color(0xFF0CA678), size: 14),
-                        SizedBox(width: 4),
-                        Text('Concluído', style: TextStyle(color: Color(0xFF0CA678), fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
+                final historico = snapshot.data ?? [];
+
+                if (historico.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Nenhuma viagem concluída no histórico.', 
+                      textAlign: TextAlign.center, // Corrigido: Agora dentro do widget Text!
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                     ),
-                  )
-                ],
-              ),
+                  );
+                }
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: historico.length,
+                  itemBuilder: (context, index) {
+                    final item = historico[index];
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${item.origem} → ${item.destino}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${item.placaVeiculo}  •  ${_formatarData(item.dhConclusao).substring(0, 8)}', 
+                                style: const TextStyle(color: Colors.black38, fontSize: 12, fontFamily: 'monospace')
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.check_circle_outline, color: Color(0xFF0CA678), size: 14),
+                                SizedBox(width: 4),
+                                Text('Concluído', style: TextStyle(color: Color(0xFF0CA678), fontWeight: FontWeight.bold, fontSize: 12)),
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ],
         ),

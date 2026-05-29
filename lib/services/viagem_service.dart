@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
 import '../models/viagem_model.dart';
 
 class ViagemService {
@@ -146,6 +145,30 @@ class ViagemService {
       'statusOperacional': StatusOperacional.NA_FILA.name,
       'status_operacional': StatusOperacional.NA_FILA.name,
       'isImpossibilitado': false,
+    });
+  }
+
+  // Busca o histórico real de todas as viagens CONCLUÍDAS deste motorista
+  Stream<List<ViagemModel>> streamHistoricoConcluido(String email) {
+    return _col.snapshots().map((s) {
+      if (s.docs.isEmpty) return [];
+
+      final lista = s.docs.map((doc) => ViagemModel.fromFirestore(doc)).where((v) {
+        final emailDoBanco = v.motoristaEmail.trim().toLowerCase();
+        final statusStr = v.statusOperacional.toString().split('.').last.toUpperCase();
+        
+        // Só entram no histórico as viagens que pertencem ao motorista E estão CONCLUÍDAS
+        return emailDoBanco == email.trim().toLowerCase() && statusStr == 'CONCLUIDO';
+      }).toList();
+
+      // Ordena para que a recém-concluída apareça sempre no topo (Decrescente)
+      lista.sort((a, b) {
+        final dataA = a.dhConclusao ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dataB = b.dhConclusao ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return dataB.compareTo(dataA);
+      });
+
+      return lista;
     });
   }
 }
