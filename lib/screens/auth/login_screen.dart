@@ -151,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text('Operadores: use email com "operador" ou "docas" no domínio',
+                Text('Operador: use email com "operador" ou "docas" no domínio.',
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),

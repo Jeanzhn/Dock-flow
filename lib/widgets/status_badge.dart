@@ -30,7 +30,8 @@ class StatusBadge extends StatelessWidget {
     StatusOperacional.PENDENTE:  {'label': 'Pendente',  'icon': Icons.schedule,            'color': Colors.grey},
     StatusOperacional.CARREGADO: {'label': 'Carregado', 'icon': Icons.inventory_2,          'color': Colors.blue},
     StatusOperacional.NA_FILA:   {'label': 'Na Fila',   'icon': Icons.people,               'color': Colors.amber.shade700},
-    StatusOperacional.CHAMADO:   {'label': 'Chamado',   'icon': Icons.phone_in_talk,         'color': Colors.green},
+    StatusOperacional.CHAMADO:     {'label': 'Chamado',   'icon': Icons.phone_in_talk,  'color': Colors.green},
+    StatusOperacional.EM_DESCARGA: {'label': 'Na Doca',   'icon': Icons.downloading,    'color': Colors.indigo},
     StatusOperacional.CONCLUIDO: {'label': 'Concluído', 'icon': Icons.check_circle,          'color': Colors.teal},
     StatusOperacional.QUEBRADO:  {'label': 'Quebrado',  'icon': Icons.warning_amber_rounded, 'color': Colors.red},
   };

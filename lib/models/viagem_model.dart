@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum StatusOperacional { PENDENTE, CARREGADO, NA_FILA, CHAMADO, QUEBRADO, CONCLUIDO }
+enum StatusOperacional { PENDENTE, CARREGADO, NA_FILA, CHAMADO, EM_DESCARGA, QUEBRADO, CONCLUIDO }
 
 class ViagemModel {
   final String id;
@@ -14,6 +14,7 @@ class ViagemModel {
   final DateTime? dhInicio;
   final DateTime? dhCarregamento;
   final DateTime? dhEntradaFila;
+  final DateTime? dhChegadaDoca;
   final DateTime? dhChamada;
   final DateTime? dhConclusao;
   final int? posicaoFila;
@@ -31,6 +32,7 @@ class ViagemModel {
     this.dhInicio,
     this.dhCarregamento,
     this.dhEntradaFila,
+    this.dhChegadaDoca,
     this.dhChamada,
     this.dhConclusao,
     this.posicaoFila,
@@ -51,6 +53,7 @@ class ViagemModel {
       'dhInicio': dhInicio != null ? Timestamp.fromDate(dhInicio!) : null,
       'dhCarregamento': dhCarregamento != null ? Timestamp.fromDate(dhCarregamento!) : null,
       'dhEntradaFila': dhEntradaFila != null ? Timestamp.fromDate(dhEntradaFila!) : null,
+      'dhChegadaDoca': dhChegadaDoca != null ? Timestamp.fromDate(dhChegadaDoca!) : null,
       'dhChamada': dhChamada != null ? Timestamp.fromDate(dhChamada!) : null,
       'dhConclusao': dhConclusao != null ? Timestamp.fromDate(dhConclusao!) : null,
       'posicaoFila': posicaoFila, // Unificado
@@ -85,6 +88,7 @@ class ViagemModel {
       dhInicio: lerData('dhInicio'),
       dhCarregamento: lerData('dhCarregamento'),
       dhEntradaFila: lerData('dhEntradaFila'),
+      dhChegadaDoca: lerData('dhChegadaDoca'),
       dhChamada: lerData('dhChamada'),
       dhConclusao: lerData('dhConclusao'),
       posicaoFila: dados['posicaoFila'] as int?,

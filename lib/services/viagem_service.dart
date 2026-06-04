@@ -30,6 +30,15 @@ class ViagemService {
     });
   }
 
+  Stream<List<ViagemModel>> streamTodasViagensOperador() {
+    return _col.snapshots().map((s) {
+      final lista = s.docs.map((doc) => ViagemModel.fromFirestore(doc)).toList();
+      // Ordena na memória para que as viagens mais recentes fiquem no topo da lista
+      lista.sort((a, b) => (b.dhInicio ?? DateTime.now()).compareTo(a.dhInicio ?? DateTime.now()));
+      return lista;
+    });
+  }
+
   Stream<ViagemModel?> streamViagemAtiva(String email) {
     return _col.snapshots().map((s) {
       if (s.docs.isEmpty) return null;

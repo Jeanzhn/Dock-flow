@@ -54,7 +54,24 @@ class _PainelMotoristaState extends State<PainelMotorista> {
       return;
     }
     
+    String placaLimpa = _placaCtrl.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    
+    RegExp regexPlaca = RegExp(r'^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$');
+
+    if (!regexPlaca.hasMatch(placaLimpa)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Placa inválida! Use o formato ABC1234 ou ABC1D23.'), 
+          backgroundColor: Colors.red
+        ),
+      );
+      return;
+    }
+    
+    _placaCtrl.text = placaLimpa;
+  
     setState(() => _loading = true);
+    
     try {
       final viagemExistente = await FirebaseFirestore.instance
           .collection('viagens')
@@ -135,7 +152,12 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             );
           }
           break;
-          
+        
+        case 'EM_DESCARGA':
+          await _service.atualizarStatus(viagem.id, StatusOperacional.EM_DESCARGA,
+            extras: {'dhChegadaDoca': DateTime.now()});
+          break;
+
         case 'CONCLUIDO':
           setState(() {
             _ultimaViagemConcluida = ViagemModel(
@@ -217,8 +239,17 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                     onPressed: () {
                       Navigator.pop(context); 
                     },
-                    child: const Text('Entendido', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('Entendido, a caminho!', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
+                ),
+                // NOVO: Botão de emergência direto no Pop-up
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Fecha o pop-up
+                    _executarAcao(viagem, 'QUEBRADO'); // Manda para status de Quebrado
+                  },
+                  child: const Text('Tive um problema / Pular vez', style: TextStyle(color: Color(0xFFFA5252), fontSize: 13, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -648,13 +679,42 @@ class _PainelMotoristaState extends State<PainelMotorista> {
           SizedBox(
             width: double.infinity, height: 48,
             child: FilledButton.icon(
-              onPressed: _loading ? null : () => _executarAcao(viagem, 'CONCLUIDO'),
+              onPressed: _loading ? null : () => _executarAcao(viagem, 'EM_DESCARGA'),
               style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00875A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: const Text('Confirmar Chegada', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text('Confirmar Chegada na Doca', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+          // NOVO: Devolvemos o botão de quebra para o caso de imprevistos a caminho da doca
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity, height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : () => _executarAcao(viagem, 'QUEBRADO'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFFA5252)), 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+              ),
+              icon: const Icon(Icons.warning_amber_rounded, size: 18, color: Color(0xFFFA5252)),
+              label: const Text('Tive um problema / Pular vez', style: TextStyle(color: Color(0xFFFA5252), fontWeight: FontWeight.bold)),
             ),
           ),
         ],
+      );
+    }
+
+    if (statusStr == 'EM_DESCARGA') {
+      return Container(
+        width: double.infinity, padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFFE8F4FD), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFD0EBFF))),
+        child: const Column(
+          children: [
+            Icon(Icons.downloading, color: Color(0xFF1C7ED6), size: 28),
+            SizedBox(height: 8),
+            Text('Veículo na Doca', style: TextStyle(color: Color(0xFF1C7ED6), fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Aguardando o operador confirmar o fim da descarga.', style: TextStyle(color: Colors.black54, fontSize: 13), textAlign: TextAlign.center),
+          ],
+        ),
       );
     }
 

@@ -3,7 +3,7 @@ import '../../models/viagem_model.dart';
 import '../../services/viagem_service.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
-
+import 'package:intl/intl.dart';
 class PainelOperador extends StatefulWidget {
   const PainelOperador({super.key});
 
@@ -68,27 +68,27 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
           ),
         ],
       ),
+      // Mude o stream principal [cite: 202]
       body: StreamBuilder<List<ViagemModel>>(
-        stream: _service.streamTodasAtivas(),
+        stream: _service.streamTodasViagensOperador(), // <-- 1. ATUALIZE AQUI
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator()); // [cite: 203]
           }
 
           final todasViagens = snap.data ?? [];
-          
-          // SEPARAÇÃO CIRÚRGICA DOS STATUS (Alinhado com as regras do motorista)
           final filaAguardando = todasViagens.where((v) => v.statusOperacional == StatusOperacional.NA_FILA).toList();
           final chamados = todasViagens.where((v) => v.statusOperacional == StatusOperacional.CHAMADO).toList();
+          final emDescarga = todasViagens.where((v) => v.statusOperacional == StatusOperacional.EM_DESCARGA).toList();
           final emTransito = todasViagens.where((v) => v.statusOperacional == StatusOperacional.PENDENTE || v.statusOperacional == StatusOperacional.CARREGADO).toList();
           final quebrados = todasViagens.where((v) => v.statusOperacional == StatusOperacional.QUEBRADO).toList();
-          final concluidosFakeCount = 2; 
+          final concluidos = todasViagens.where((v) => v.statusOperacional == StatusOperacional.CONCLUIDO).toList();
 
           // Ordenação FIFO da fila de espera por milissegundos
           filaAguardando.sort((a, b) => (a.posicaoFila ?? 0).compareTo(b.posicaoFila ?? 0));
 
           // Criamos uma lista unificada para a primeira aba mostrar quem aguarda e quem já foi chamado (separados visualmente)
-          final listaAbaFila = [...chamados, ...filaAguardando];
+          final listaAbaFila = [...emDescarga, ...chamados, ...filaAguardando];
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +108,7 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
                       const SizedBox(width: 16),
                       _buildContadorCard('Quebrados', quebrados.length, Icons.warning_amber_rounded, const Color(0xFFFFF5F5), const Color(0xFFFA5252)),
                       const SizedBox(width: 16),
-                      _buildContadorCard('Concluídos', concluidosFakeCount, Icons.check_circle_outline, const Color(0xFFF1F3F5), const Color(0xFF495057)),
+                      _buildContadorCard('Concluídos', concluidos.length, Icons.check_circle_outline, const Color(0xFFF1F3F5), const Color(0xFF495057)),
                     ],
                   ),
                 ),
@@ -129,7 +129,7 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
                     tabs: [
                       Tab(text: 'Fila (${listaAbaFila.length})'),
                       Tab(text: 'Quebrados (${quebrados.length})'),
-                      Tab(text: 'Concluídos ($concluidosFakeCount)'),
+                      Tab(text: 'Concluídos (${concluidos.length})'),
                     ],
                   ),
                 ),
@@ -142,7 +142,7 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
                   children: [
                     _buildListaMotoristas(listaAbaFila), // Exibe a lista tratada
                     _buildListaMotoristas(quebrados),
-                    _buildListaConcluidosFake(),
+                    _buildListaConcluidosReal(concluidos),
                   ],
                 ),
               ),
@@ -260,31 +260,43 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Botão de Ação Controlado
+                // ==========================================
+                // BOTÃO DE AÇÃO CONTROLADO E DINÂMICO
+                // ==========================================
                 SizedBox(
-                  width: 130, height: 36,
-                  child: isChamado
-                      ? OutlinedButton.icon(
-                          onPressed: null, // Desativado estavelmente aguardando o motorista aceitar
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFE6FCF5)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          icon: const Icon(Icons.phone_in_talk, size: 14, color: Color(0xFF0CA678)),
-                          label: const Text('Aguardando', style: TextStyle(color: Color(0xFF0CA678), fontSize: 13, fontWeight: FontWeight.bold)),
-                        )
-                      : FilledButton.icon(
-                          onPressed: () async {
-                            // Executa a chamada real no Firebase mudando para CHAMADO
-                            await _service.chamarMotorista(viagem.id);
-                          },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF00875A),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          icon: const Icon(Icons.phone, size: 14),
-                          label: const Text('Chamar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                        ),
+                  width: 140, height: 36,
+                  child: () {
+                    if (viagem.statusOperacional == StatusOperacional.EM_DESCARGA) {
+                      return FilledButton.icon(
+                        onPressed: () async => await _service.atualizarStatus(viagem.id, StatusOperacional.CONCLUIDO, extras: {'dhConclusao': DateTime.now()}),
+                        style: FilledButton.styleFrom(backgroundColor: Colors.indigo, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        icon: const Icon(Icons.check_box, size: 14),
+                        label: const Text('Descarregou', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      );
+                    } else if (isChamado) {
+                      return OutlinedButton.icon(
+                        onPressed: null,
+                        style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFE6FCF5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        icon: const Icon(Icons.phone_in_talk, size: 14, color: Color(0xFF0CA678)),
+                        label: const Text('Aguardando', style: TextStyle(color: Color(0xFF0CA678), fontSize: 12, fontWeight: FontWeight.bold)),
+                      );
+                    } else if (viagem.statusOperacional == StatusOperacional.QUEBRADO) {
+                      // NOVO: Trava de segurança para não chamar caminhão quebrado
+                      return OutlinedButton.icon(
+                        onPressed: null, // Totalmente desativado para o operador
+                        style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFFFF5F5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        icon: const Icon(Icons.build, size: 14, color: Color(0xFFFA5252)),
+                        label: const Text('Manutenção', style: TextStyle(color: Color(0xFFFA5252), fontSize: 12, fontWeight: FontWeight.bold)),
+                      );
+                    } else {
+                      return FilledButton.icon(
+                        onPressed: () async => await _service.chamarMotorista(viagem.id),
+                        style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00875A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        icon: const Icon(Icons.phone, size: 14),
+                        label: const Text('Chamar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      );
+                    }
+                  }(),
                 ),
               ],
             ),
@@ -316,37 +328,59 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
     );
   }
 
-  Widget _buildListaConcluidosFake() {
-    return ListView(
+  Widget _buildListaConcluidosReal(List<ViagemModel> concluidos) {
+    if (concluidos.isEmpty) {
+      return const Center(child: Text('Nenhuma viagem concluída.', style: TextStyle(color: Colors.grey)));
+    }
+    
+    return ListView.builder(
       padding: const EdgeInsets.all(20),
-      children: [
-        _buildCardConcluidoFake('João Silva', 'ABC-1234', 'Macapá'),
-        _buildCardConcluidoFake('Maria Santos', 'DEF-5678', 'Porto Grande'),
-      ],
+      itemCount: concluidos.length,
+      itemBuilder: (context, index) {
+        final v = concluidos[index];
+        // Passa os dados reais para o seu Card já existente [cite: 253, 254]
+        return _buildCardConcluidoReal(v);
+      },
     );
   }
 
-  Widget _buildCardConcluidoFake(String nome, String placa, String origem) {
+  Widget _buildCardConcluidoReal(ViagemModel viagem) {
+    // Formata os horários. Se por acaso estiver vazio (viagens antigas de teste), mostra --:--
+    String hrChegada = viagem.dhChegadaDoca != null ? DateFormat('dd/MM/yy HH:mm').format(viagem.dhChegadaDoca!) : '--:--';
+    String hrSaida = viagem.dhConclusao != null ? DateFormat('dd/MM/yy HH:mm').format(viagem.dhConclusao!) : '--:--';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 6),
-                Text('$placa  •  $origem → Santana-AP', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                Text(viagem.motoristaNome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),
+                  child: const Text('Concluído', style: TextStyle(color: Color(0xFF0CA678), fontWeight: FontWeight.bold, fontSize: 11)),
+                )
               ],
             ),
+            const SizedBox(height: 6),
+            Text('${viagem.placaVeiculo}  •  ${viagem.origem} → Santana-AP', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),
-              child: const Text('Concluído', style: TextStyle(color: Color(0xFF0CA678), fontWeight: FontWeight.bold, fontSize: 12)),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Chegou na Doca:\n$hrChegada', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                  Text('Fim da Descarga:\n$hrSaida', style: const TextStyle(fontSize: 12, color: Colors.black87), textAlign: TextAlign.right),
+                ],
+              ),
             )
           ],
         ),
