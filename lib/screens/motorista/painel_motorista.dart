@@ -6,7 +6,6 @@ import 'package:dock_flow/screens/auth/login_screen.dart';
 import '../../models/viagem_model.dart';
 import '../../services/viagem_service.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/status_badge.dart';
 
 class PainelMotorista extends StatefulWidget {
   const PainelMotorista({super.key});
@@ -18,7 +17,12 @@ class PainelMotorista extends StatefulWidget {
 class _PainelMotoristaState extends State<PainelMotorista> {
   final _service = ViagemService();
   final _auth = AuthService();
-  final _placaCtrl = TextEditingController();
+  
+  // Controle de Placas Dinâmicas
+  List<String> _placasPermitidas = [];
+  String? _placaSelecionada;
+  bool _carregandoPlacas = true;
+
   String? _origemSelecionada;
   String? _tipoCargaSelecionado;
   bool _loading = false;
@@ -36,55 +40,64 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   User get _user => FirebaseAuth.instance.currentUser!;
 
   @override
-  void dispose() {
-    _placaCtrl.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _buscarPlacasDoMotorista();
+  }
+
+  Future<void> _buscarPlacasDoMotorista() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.email != null) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('motoristas')
+            .where('emailAcesso', isEqualTo: user.email)
+            .limit(1)
+            .get();
+
+        if (snap.docs.isNotEmpty) {
+          final dados = snap.docs.first.data();
+          setState(() {
+            _placasPermitidas = List<String>.from(dados['veiculosPermitidos'] ?? []);
+            if (_placasPermitidas.isNotEmpty) {
+              _placaSelecionada = _placasPermitidas.first;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint('Erro ao buscar placas: $e');
+      }
+    }
+    setState(() => _carregandoPlacas = false);
   }
 
   String _formatarData(DateTime? data) {
     if (data == null) return '--/--/-- --:--';
-    return DateFormat('dd/05/yy HH:mm').format(data);
+    return DateFormat('dd/MM/yy HH:mm').format(data);
   }
 
   Future<void> _criarViagem() async {
-    if (_placaCtrl.text.isEmpty || _origemSelecionada == null || _tipoCargaSelecionado == null) {
+    if (_placaSelecionada == null || _origemSelecionada == null || _tipoCargaSelecionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, preencha todos os campos.'), backgroundColor: Colors.orange),
       );
       return;
     }
-    
-    String placaLimpa = _placaCtrl.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    
-    RegExp regexPlaca = RegExp(r'^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$');
-
-    if (!regexPlaca.hasMatch(placaLimpa)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Placa inválida! Use o formato ABC1234 ou ABC1D23.'), 
-          backgroundColor: Colors.red
-        ),
-      );
-      return;
-    }
-    
-    _placaCtrl.text = placaLimpa;
   
     setState(() => _loading = true);
-    
     try {
       final viagemExistente = await FirebaseFirestore.instance
           .collection('viagens')
           .where('motoristaEmail', isEqualTo: _user.email!)
           .get();
-
+          
       if (viagemExistente.docs.isNotEmpty) {
         bool temViagemAtiva = viagemExistente.docs.any((doc) {
           final dados = doc.data();
           final status = dados['statusOperacional'] ?? dados['status_operacional'] ?? '';
           return status != 'CONCLUIDO';
         });
-
+        
         if (temViagemAtiva) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -103,14 +116,13 @@ class _PainelMotoristaState extends State<PainelMotorista> {
         id: '',
         motoristaEmail: _user.email!,
         motoristaNome: _user.displayName ?? _user.email!,
-        placaVeiculo: _placaCtrl.text.toUpperCase().trim(),
+        placaVeiculo: _placaSelecionada!,
         origem: _origemSelecionada!,
         destino: 'Santana-AP',
         tipoCarga: _tipoCargaSelecionado!,
         dhInicio: DateTime.now(),
       ));
-
-      _placaCtrl.clear();
+      
       setState(() {
         _origemSelecionada = null;
         _tipoCargaSelecionado = null;
@@ -118,7 +130,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
         _modalAberto = false; 
         _ultimaViagemConcluida = null;
       });
-
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Viagem iniciada com sucesso!'), backgroundColor: Colors.green),
@@ -152,7 +164,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             );
           }
           break;
-        
+          
         case 'EM_DESCARGA':
           await _service.atualizarStatus(viagem.id, StatusOperacional.EM_DESCARGA,
             extras: {'dhChegadaDoca': DateTime.now()});
@@ -176,7 +188,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
               dhConclusao: DateTime.now(),
             );
           });
-          
           await _service.atualizarStatus(viagem.id, StatusOperacional.CONCLUIDO,
               extras: {'dhConclusao': DateTime.now()});
           break;
@@ -201,7 +212,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   }
 
   void _mostrarModalChamado(BuildContext context, ViagemModel viagem) {
-    _modalAberto = true; 
+    _modalAberto = true;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -222,10 +233,10 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                 const SizedBox(height: 16),
                 const Text('É A SUA VEZ!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                 const SizedBox(height: 12),
-                Text(
-                  'O operador está chamando você para a doca de descarga. Dirija-se imediatamente ao local.',
+                const Text(
+                  'O operador está chamando você para a doca de descarga.\nDirija-se imediatamente ao local.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: const Color(0xFF495057), fontSize: 13, height: 1.4),
+                  style: TextStyle(color: Color(0xFF495057), fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -242,12 +253,11 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                     child: const Text('Entendido, a caminho!', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
-                // NOVO: Botão de emergência direto no Pop-up
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context); // Fecha o pop-up
-                    _executarAcao(viagem, 'QUEBRADO'); // Manda para status de Quebrado
+                    Navigator.pop(context);
+                    _executarAcao(viagem, 'QUEBRADO');
                   },
                   child: const Text('Tive um problema / Pular vez', style: TextStyle(color: Color(0xFFFA5252), fontSize: 13, fontWeight: FontWeight.bold)),
                 ),
@@ -262,7 +272,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -310,7 +319,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             });
           }
 
-          // Lógica segura de renderização das telas alternativas
           Widget telaExibida;
           if (_ultimaViagemConcluida != null && !_exibirFormularioNovaViagem) {
             telaExibida = _buildTelaSucessoConcluido(_ultimaViagemConcluida!, cs);
@@ -326,7 +334,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
               children: [
                 telaExibida,
                 const SizedBox(height: 20),
-                _buildHistoricoReal(), // Histórico Real e cumulativo do banco de dados
+                _buildHistoricoReal(),
               ],
             ),
           );
@@ -351,20 +359,43 @@ class _PainelMotoristaState extends State<PainelMotorista> {
               Text('Nova Viagem', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
             ]),
             const SizedBox(height: 20),
+            
+            // CAMPO PLACA DO VEÍCULO (AGORA DINÂMICO)
             const Text('Placa do Veículo', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 6),
-            TextField(
-              controller: _placaCtrl,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
-                hintText: 'ABC-1234',
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                fillColor: const Color(0xFFF8F9FA),
-                filled: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
+            if (_carregandoPlacas)
+              const Center(child: LinearProgressIndicator())
+            else if (_placasPermitidas.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                width: double.infinity,
+                decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.red.shade200)),
+                child: const Text('Nenhum veículo vinculado ao seu perfil. Fale com o administrador.', style: TextStyle(color: Colors.red, fontSize: 13)),
+              )
+            else
+              DropdownButtonFormField<String>(
+                value: _placaSelecionada,
+                hint: const Text('Selecione a placa', style: TextStyle(color: Colors.black38, fontSize: 14)),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  fillColor: const Color(0xFFF8F9FA),
+                  filled: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade200)),
+                ),
+                items: _placasPermitidas.map((placa) {
+                  return DropdownMenuItem(
+                    value: placa,
+                    child: Text(placa, style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                  );
+                }).toList(),
+                onChanged: (valor) {
+                  setState(() {
+                    _placaSelecionada = valor;
+                  });
+                },
               ),
-            ),
+
             const SizedBox(height: 16),
             const Text('Origem', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 6),
@@ -482,7 +513,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
             const SizedBox(height: 16),
             _infoRowClean('Placa do Veículo', viagem.placaVeiculo),
             _infoRowClean('Rota Concluída', '${viagem.origem} → ${viagem.destino}'),
-            _infoRowClean('Tipo de Carga', alignment: CrossAxisAlignment.end, viagem.tipoCarga),
+            _infoRowClean('Tipo de Carga', viagem.tipoCarga, alignment: CrossAxisAlignment.end),
             _infoRowClean('Horário de Conclusão', _formatarData(viagem.dhConclusao ?? DateTime.now())),
             const SizedBox(height: 24),
             SizedBox(
@@ -516,15 +547,18 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     Color bgColor = const Color(0xFFF1F3F5);
     Color textColor = const Color(0xFF495057);
     IconData icone = Icons.lock_clock;
-
     if (statusStr == 'CARREGADO') {
-      label = 'Carregado'; bgColor = const Color(0xFFE7F5FF); textColor = const Color(0xFF1C7ED6); icone = Icons.inventory_2_outlined;
+      label = 'Carregado'; bgColor = const Color(0xFFE7F5FF);
+      textColor = const Color(0xFF1C7ED6); icone = Icons.inventory_2_outlined;
     } else if (statusStr == 'NA_FILA' || statusStr == 'NAFILA') {
-      label = 'Na Fila'; bgColor = const Color(0xFFFFF9DB); textColor = const Color(0xFFF59F00); icone = Icons.people_outline;
+      label = 'Na Fila';
+      bgColor = const Color(0xFFFFF9DB); textColor = const Color(0xFFF59F00); icone = Icons.people_outline;
     } else if (statusStr == 'QUEBRADO') {
-      label = 'Quebrado'; bgColor = const Color(0xFFFFF5F5); textColor = const Color(0xFFFA5252); icone = Icons.warning_amber_rounded;
+      label = 'Quebrado'; bgColor = const Color(0xFFFFF5F5);
+      textColor = const Color(0xFFFA5252); icone = Icons.warning_amber_rounded;
     } else if (statusStr == 'CHAMADO') {
-      label = 'Chamado'; bgColor = const Color(0xFFE6FCF5); textColor = const Color(0xFF00875A); icone = Icons.phone_in_talk;
+      label = 'Chamado';
+      bgColor = const Color(0xFFE6FCF5); textColor = const Color(0xFF00875A); icone = Icons.phone_in_talk;
     }
 
     return Container(
@@ -548,7 +582,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     if (statusStr == 'CARREGADO') etapaAtual = 2;
     if (statusStr == 'NA_FILA' || statusStr == 'NAFILA' || statusStr == 'QUEBRADO') etapaAtual = 3;
     if (statusStr == 'CHAMADO' || statusStr == 'CONCLUIDO') etapaAtual = 4;
-
     return Row(
       children: List.generate(7, (index) {
         if (index % 2 == 0) {
@@ -574,7 +607,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
 
   Widget _buildBotaoAcaoDinamico(ViagemModel viagem) {
     final statusStr = viagem.statusOperacional.toString().split('.').last.toUpperCase();
-
     if (statusStr == 'PENDENTE') {
       return SizedBox(
         width: double.infinity, height: 48,
@@ -640,7 +672,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                 Text('Veículo Impossibilitado', style: TextStyle(color: Color(0xFFFA5252), fontWeight: FontWeight.bold)),
                 Text('Sua posição na fila está preservada', style: TextStyle(color: Color(0xFFFA5252), fontSize: 12)),
               ],
-            ),
+             ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -685,7 +717,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
               label: const Text('Confirmar Chegada na Doca', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
-          // NOVO: Devolvemos o botão de quebra para o caso de imprevistos a caminho da doca
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity, height: 48,
@@ -737,7 +768,6 @@ class _PainelMotoristaState extends State<PainelMotorista> {
               Text('Histórico de Viagens', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
             ]),
             const SizedBox(height: 16),
-            
             StreamBuilder<List<ViagemModel>>(
               stream: _service.streamHistoricoConcluido(_user.email!),
               builder: (context, snapshot) {
@@ -756,7 +786,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       'Nenhuma viagem concluída no histórico.', 
-                      textAlign: TextAlign.center, // Corrigido: Agora dentro do widget Text!
+                      textAlign: TextAlign.center, 
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                     ),
                   );

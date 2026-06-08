@@ -1,0 +1,98 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../models/motorista_model.dart';
+import '../models/veiculo_model.dart';
+
+class AdminService {
+  final _db = FirebaseFirestore.instance;
+
+  // ==========================================
+  // GESTÃO DE VEÍCULOS
+  // ==========================================
+  Future<void> adicionarVeiculo(String placa) async {
+    final placaLimpa = placa.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    await _db.collection('veiculos').doc(placaLimpa).set({
+      'placa': placaLimpa,
+      'ativo': true,
+      'dhCriacao': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<List<VeiculoModel>> streamVeiculos() {
+    return _db.collection('veiculos').snapshots().map((s) => 
+      s.docs.map((d) => VeiculoModel.fromFirestore(d.data(), d.id)).toList()
+    );
+  }
+
+  // ==========================================
+  // GESTÃO DE MOTORISTAS (COM CRIAÇÃO DE LOGIN)
+  // ==========================================
+  Future<void> criarMotorista({
+    required String nome,
+    required String cpf,
+    required List<String> veiculosIniciais,
+  }) async {
+    final cpfLimpo = cpf.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cpfLimpo.length != 11) throw Exception("CPF inválido. Digite os 11 números.");
+    final ultimos4 = cpfLimpo.substring(7);
+
+    // 2. Extrai o primeiro nome, converte para minúsculo e remove acentos
+    String primeiroNome = nome.trim().split(' ')[0].toLowerCase();
+    primeiroNome = primeiroNome
+        .replaceAll(RegExp(r'[áàâã]'), 'a')
+        .replaceAll(RegExp(r'[éèê]'), 'e')
+        .replaceAll(RegExp(r'[íìî]'), 'i')
+        .replaceAll(RegExp(r'[óòôõ]'), 'o')
+        .replaceAll(RegExp(r'[úùû]'), 'u')
+        .replaceAll(RegExp(r'ç'), 'c');
+
+    // 3. Gera as credenciais amigáveis
+    // Exemplo: joao1234@dockflow.com
+    final emailGerado = '$primeiroNome$ultimos4@dockflow.com'; 
+    final senhaGerada = '2026$ultimos4';
+    // 2. Cria o usuário no Firebase Auth SEM deslogar o Admin
+    FirebaseApp appSecundario = await Firebase.initializeApp(
+      name: 'SecondaryApp',
+      options: Firebase.app().options,
+    );
+    
+    try {
+      await FirebaseAuth.instanceFor(app: appSecundario)
+          .createUserWithEmailAndPassword(email: emailGerado, password: senhaGerada);
+    } catch (e) {
+      // Ignora erro se o usuário já existir, apenas atualiza o banco de dados abaixo
+    } finally {
+      await appSecundario.delete(); // Destrói a instância secundária
+    }
+
+    // 3. Salva o perfil completo no Firestore
+    final docRef = _db.collection('motoristas').doc();
+    final novoMotorista = MotoristaModel(
+      id: docRef.id,
+      nome: nome,
+      cpf: cpfLimpo,
+      emailAcesso: emailGerado,
+      veiculosPermitidos: veiculosIniciais,
+    );
+
+    await docRef.set(novoMotorista.toMap());
+  }
+
+  // Atualiza as placas que o motorista tem permissão para dirigir
+  Future<void> atualizarPermissoesVeiculos(String motoristaId, List<String> novasPlacas) async {
+    await _db.collection('motoristas').doc(motoristaId).update({
+      'veiculosPermitidos': novasPlacas,
+    });
+  }
+
+  Future<void> removerVeiculo(String placa) async {
+      await _db.collection('veiculos').doc(placa).delete();
+    }
+
+  Stream<List<MotoristaModel>> streamMotoristas() {
+    return _db.collection('motoristas').snapshots().map((s) => 
+      s.docs.map((d) => MotoristaModel.fromFirestore(d.data(), d.id)).toList()
+    );
+  }
+}

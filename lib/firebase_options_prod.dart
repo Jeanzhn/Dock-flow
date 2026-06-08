@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart'
 ///
 /// Example:
 /// ```dart
-/// import 'firebase_options.dart';
+/// import 'firebase_options_prod.dart';
 /// // ...
 /// await Firebase.initializeApp(
 ///   options: DefaultFirebaseOptions.currentPlatform,
@@ -85,5 +85,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'dockflow-cd84e.firebasestorage.app',
     measurementId: 'G-PQSTS440XM',
   );
-
 }

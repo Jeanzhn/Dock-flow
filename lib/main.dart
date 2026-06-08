@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/motorista/painel_motorista.dart';
 import 'screens/operador/painel_operador.dart';
+import 'screens/administrativo/painel_admin.dart';
+import 'firebase_options_dev.dart' as dev;
+import 'firebase_options_prod.dart' as prod;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Lê a tag ENVIRONMENT passada pelo terminal (o padrão caso não passe nada será dev)
+  const String env = String.fromEnvironment('ENVIRONMENT', defaultValue: 'dev');
+
+  await Firebase.initializeApp(
+    options: env == 'prod' 
+        ? prod.DefaultFirebaseOptions.currentPlatform 
+        : dev.DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const DockFlowApp());
 }
 
@@ -52,13 +63,15 @@ class RoleRouter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    // Operadores têm email com domínio @operador.dockflow ou claim custom
-    // Aqui usamos uma lógica simples: email contém "operador"
-    final isOperador = user?.email?.contains('operador') ?? false;
+    final email = user?.email?.toLowerCase() ?? '';
 
-    if (isOperador) {
+    // LÓGICA DE ROTEAMENTO (MVP)
+    if (email.endsWith('@admin.dockflow.com')) {
+      return const PainelAdmin();
+    } else if (email.endsWith('@operador.dockflow.com') || email.endsWith('@docas.com')) {
       return const PainelOperador();
     }
+    
     return const PainelMotorista();
   }
 }

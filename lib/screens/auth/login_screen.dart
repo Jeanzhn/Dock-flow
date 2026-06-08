@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../operador/painel_operador.dart'; // Certifique-se de que o import do operador está correto
 import '../motorista/painel_motorista.dart';
+import '../administrativo/painel_admin.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,16 +41,23 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null && mounted) {
         String email = user.email?.toLowerCase() ?? '';
         
-        // 3. ROTEAMENTO: Verifica se contém "operador" ou "docas" no e-mail
-        if (email.contains('operador') || email.contains('docas')) {
+        // 3. ROTEAMENTO: Verifica se contém "operador" ou "docas" no e-mail para identificar operadores, ou se é o email específico do admin. O restante é motorista.
+        
+        // Verifica se é exatamente o email do administrador
+        if (email.endsWith('@admin.dockflow.com')) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const PainelOperador()), // Abre painel do chefe
+            MaterialPageRoute(builder: (_) => const PainelAdmin()),
+          );
+        } else if (email.endsWith('@operador.dockflow.com') || email.endsWith('@docas.com')) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const PainelOperador()),
           );
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const PainelMotorista()), // Abre painel do caminhoneiro
+            MaterialPageRoute(builder: (_) => const PainelMotorista()),
           );
         }
       }
