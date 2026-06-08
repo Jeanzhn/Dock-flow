@@ -1,8 +1,11 @@
 plugins {
     id("com.android.application")
+<<<<<<< HEAD
     // START: FlutterFire Configuration
     id("com.google.gms.google-services")
     // END: FlutterFire Configuration
+=======
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
@@ -10,7 +13,11 @@ plugins {
 
 android {
     namespace = "com.example.dock_flow"
+<<<<<<< HEAD
     compileSdk = 36
+=======
+    compileSdk = flutter.compileSdkVersion
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -28,7 +35,11 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
+<<<<<<< HEAD
         targetSdk = 36
+=======
+        targetSdk = flutter.targetSdkVersion
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

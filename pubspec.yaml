@@ -1,5 +1,9 @@
 name: dock_flow
+<<<<<<< HEAD
 description: "Sistema de gestão de docas e fila de caminhões"
+=======
+description: "A new Flutter project."
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -30,19 +34,30 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+<<<<<<< HEAD
   mysql1: ^0.20.0 # ou a versão mais recente
+=======
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+<<<<<<< HEAD
   firebase_core: ^4.9.0
   cloud_firestore: ^6.4.1
+=======
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
   geolocator: ^14.0.2
   google_maps_flutter: ^2.17.0
   flutter_map: ^8.3.0
   latlong2: ^0.9.1
+<<<<<<< HEAD
   firebase_auth: ^6.5.1
   provider: ^6.1.2
+=======
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
 
 dev_dependencies:
   flutter_test:

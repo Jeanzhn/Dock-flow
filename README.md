@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 📦 Dock Flow
 
 Um projeto logístico desenvolvido em Flutter para otimização de filas e controle de fluxo operacional de docas.
@@ -68,3 +69,22 @@ Com as chaves geradas e o ambiente configurado, o projeto está pronto para test
 flutter run
 ```
 > 💡 **Nota:** Caso ocorram erros de permissão de pasta no Windows durante a compilação, feche a sua IDE (VS Code/Android Studio), abra um novo terminal na pasta do projeto e tente rodar o comando novamente.
+=======
+# dock_flow
+
+A new Flutter project.
+
+## Getting Started
+
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
+>>>>>>> 5604afa8b389ea01d3eaff1f4a55b942d36afa90
