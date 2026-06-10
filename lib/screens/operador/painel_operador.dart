@@ -273,6 +273,14 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
                         icon: const Icon(Icons.check_box, size: 14),
                         label: const Text('Descarregou', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       );
+                    }else if (viagem.statusOperacional == StatusOperacional.CHEGOU_DOCA) {
+                      // NOVO: Validação Humana. GPS detectou, Operador confirma.
+                      return FilledButton.icon(
+                        onPressed: () async => await _service.atualizarStatus(viagem.id, StatusOperacional.EM_DESCARGA, extras: {'dhChegadaDoca': DateTime.now()}),
+                        style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1C7ED6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        icon: const Icon(Icons.verified_user, size: 14),
+                        label: const Text('Validar Chegada', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      );
                     } else if (isChamado) {
                       return OutlinedButton.icon(
                         onPressed: null,
@@ -319,6 +327,13 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(color: const Color(0xFFFFF5F5), borderRadius: BorderRadius.circular(6)),
         child: const Text('Quebrado', style: TextStyle(color: const Color(0xFFFA5252), fontSize: 11, fontWeight: FontWeight.bold)),
+      );
+    }
+    if (status == StatusOperacional.CHEGOU_DOCA) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: const Color(0xFFE7F5FF), borderRadius: BorderRadius.circular(6)),
+        child: const Text('No Pátio (GPS)', style: TextStyle(color: Color(0xFF1C7ED6), fontSize: 11, fontWeight: FontWeight.bold)),
       );
     }
     return Container(

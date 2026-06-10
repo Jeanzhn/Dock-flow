@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../models/motorista_model.dart';
 import '../models/veiculo_model.dart';
-
+import '../models/ponto_controle_model.dart';
 class AdminService {
   final _db = FirebaseFirestore.instance;
 
@@ -94,5 +94,41 @@ class AdminService {
     return _db.collection('motoristas').snapshots().map((s) => 
       s.docs.map((d) => MotoristaModel.fromFirestore(d.data(), d.id)).toList()
     );
+  }
+
+  Future<void> adicionarPontoControle(PontoControleModel ponto) async {
+    final docRef = _db.collection('pontos_controle').doc();
+    final novoPonto = PontoControleModel(
+      id: docRef.id,
+      nome: ponto.nome,
+      lat: ponto.lat,
+      lng: ponto.lng,
+      raioMetros: ponto.raioMetros,
+      tipoAcao: ponto.tipoAcao,
+    );
+    await docRef.set(novoPonto.toMap());
+  }
+
+  Stream<List<PontoControleModel>> streamPontosControle() {
+    return _db.collection('pontos_controle').snapshots().map((s) => 
+      s.docs.map((d) => PontoControleModel.fromFirestore(d.data(), d.id)).toList()
+    );
+  }
+
+  Future<void> removerPontoControle(String id) async {
+    await _db.collection('pontos_controle').doc(id).delete();
+  }
+
+  Future<void> atualizarRaioPontoControle(String id, double novoRaio) async {
+    await _db.collection('pontos_controle').doc(id).update({
+      'raioMetros': novoRaio,
+    });
+  }
+
+  Future<void> atualizarPosicaoPonto(String id, double lat, double lng) async {
+    await _db.collection('pontos_controle').doc(id).update({
+      'lat': lat,
+      'lng': lng,
+    });
   }
 }

@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../../models/ponto_controle_model.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dock_flow/screens/auth/login_screen.dart';
 import '../../models/viagem_model.dart';
 import '../../services/viagem_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/sync_service.dart';
+import 'dart:async';
 
 class PainelMotorista extends StatefulWidget {
   const PainelMotorista({super.key});
@@ -17,7 +23,11 @@ class PainelMotorista extends StatefulWidget {
 class _PainelMotoristaState extends State<PainelMotorista> {
   final _service = ViagemService();
   final _auth = AuthService();
-  
+  // GPS e Geofencing
+  Timer? _radarTimer;
+  ViagemModel? _viagemAtivaParaRadar;
+  List<PontoControleModel> _pontosControle = [];
+  bool _checandoGPS = false;
   // Controle de Placas Dinâmicas
   List<String> _placasPermitidas = [];
   String? _placaSelecionada;
@@ -39,10 +49,129 @@ class _PainelMotoristaState extends State<PainelMotorista> {
 
   User get _user => FirebaseAuth.instance.currentUser!;
 
+  
+
   @override
   void initState() {
     super.initState();
     _buscarPlacasDoMotorista();
+    _baixarPontosDeControle();
+
+    // LIGANDO O MOTOR DO RADAR
+    _radarTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (_viagemAtivaParaRadar != null) {
+        _verificarGeofenceSilencioso(_viagemAtivaParaRadar!);
+      }
+    });
+  }
+
+  // DESLIGANDO O MOTOR (Muito importante para não travar o celular)
+  @override
+  void dispose() {
+    _radarTimer?.cancel();
+    super.dispose();
+  }
+  Future<void> _baixarPontosDeControle() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('pontos_controle').get();
+      setState(() {
+        // Substitua a linha do fromMap por esta abaixo:
+        _pontosControle = snap.docs.map((doc) => 
+          PontoControleModel.fromFirestore(doc.data(), doc.id)
+        ).toList();
+      });
+    } catch (e) {
+      debugPrint('Erro ao baixar geofences: $e');
+    }
+  }
+
+  // VALIDADOR DE GEOFENCING (GPS)
+  // ==========================================
+  Future<bool> _validarLocalizacao(String tipoAcaoDesejada) async {
+    setState(() => _checandoGPS = true);
+    try {
+      // 1. Checa se o GPS está ligado e pede permissão
+      bool servicoHabilitado = await Geolocator.isLocationServiceEnabled();
+      if (!servicoHabilitado) throw 'Ligue o GPS do celular.';
+
+      LocationPermission permissao = await Geolocator.checkPermission();
+      if (permissao == LocationPermission.denied) {
+        permissao = await Geolocator.requestPermission();
+        if (permissao == LocationPermission.denied) throw 'Permissão de GPS negada.';
+      }
+
+      // 2. Pega a posição exata do caminhão agora
+      Position posAtual = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final distanciaCalc = const Distance(); // Calculadora do pacote latlong2
+
+      // 3. Varre os pontos do Administrador
+      for (var ponto in _pontosControle) {
+        // REGRA DE OURO: Para marcar "CARREGADO", ele pode estar na zona de CARREGAMENTO ou na de FILA (caso estava sem internet antes).
+        bool isAreaValida = ponto.tipoAcao == tipoAcaoDesejada;
+        if (tipoAcaoDesejada == 'CARREGAMENTO' && ponto.tipoAcao == 'FILA') {
+          isAreaValida = true; 
+        }
+
+        if (isAreaValida) {
+          // Calcula a distância do motorista até o centro do ponto
+          double distMetros = distanciaCalc.as(
+            LengthUnit.Meter, 
+            LatLng(posAtual.latitude, posAtual.longitude), 
+            LatLng(ponto.lat, ponto.lng)
+          );
+
+          if (distMetros <= ponto.raioMetros) {
+            return true; // Motorista está dentro da bolha! Liberado.
+          }
+        }
+      }
+      return false; // Motorista fora da bolha
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      return false;
+    } finally {
+      setState(() => _checandoGPS = false);
+    }
+  }
+
+  Future<void> _verificarGeofenceSilencioso(ViagemModel viagem) async {
+    if (viagem.statusOperacional == StatusOperacional.PENDENTE) return; // Só monitora depois de carregado
+
+    try {
+      Position posAtual = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final distCalc = const Distance();
+      final prefs = await SharedPreferences.getInstance();
+
+      for (var ponto in _pontosControle) {
+        double distMetros = distCalc.as(LengthUnit.Meter, LatLng(posAtual.latitude, posAtual.longitude), LatLng(ponto.lat, ponto.lng));
+        bool estaDentro = distMetros <= ponto.raioMetros;
+
+        // 1. REGRA DA TRIAGEM (OPÇÃO B - ENTRA NA FILA AO SAIR)
+        if (ponto.tipoAcao == 'FILA' && viagem.statusOperacional == StatusOperacional.CARREGADO) {
+          bool jaEntrouAntes = prefs.getBool('entrou_triagem_${viagem.id}') ?? false;
+          
+          if (estaDentro && !jaEntrouAntes) {
+            // Gatilho de ENTER
+            await prefs.setBool('entrou_triagem_${viagem.id}', true);
+          } else if (!estaDentro && jaEntrouAntes) {
+            // Gatilho de EXIT (Estava dentro, agora está fora)
+            await SyncService.salvarLogLocal(viagem.id, 'SAIU_TRIAGEM');
+            await SyncService.sincronizarDadosPendentes(); // Tenta subir
+            await prefs.remove('entrou_triagem_${viagem.id}'); // Limpa o estado
+          }
+        }
+
+        // 2. REGRA DA DOCA (CHEGOU AO DESTINO)
+        if (ponto.tipoAcao == 'DOCA' && viagem.statusOperacional == StatusOperacional.CHAMADO) {
+          if (estaDentro) {
+             await SyncService.salvarLogLocal(viagem.id, 'CHEGOU_DOCA');
+             await SyncService.sincronizarDadosPendentes();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Geofence silencioso ignorado por erro: $e');
+    }
   }
 
   Future<void> _buscarPlacasDoMotorista() async {
@@ -152,8 +281,13 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     try {
       switch (acao) {
         case 'CARREGADO':
-          await _service.atualizarStatus(viagem.id, StatusOperacional.CARREGADO,
-              extras: {'dhCarregamento': DateTime.now()});
+          try {
+            await _service.atualizarStatus(viagem.id, StatusOperacional.CARREGADO, extras: {'dhCarregamento': DateTime.now()});
+          } catch (e) {
+            // Failsafe: Sem internet, salva no Log Local
+            await SyncService.salvarLogLocal(viagem.id, 'CARREGADO');
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salvo offline. Sincronizará automaticamente.'), backgroundColor: Colors.orange));
+          }
           break;
           
         case 'NA_FILA':
@@ -312,7 +446,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
           }
 
           final viagem = snap.data;
-
+          _viagemAtivaParaRadar = viagem; // Atualiza a viagem para o radar
           if (viagem != null && viagem.statusOperacional == StatusOperacional.CHAMADO && !_modalAberto) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _mostrarModalChamado(context, viagem);
@@ -611,22 +745,17 @@ class _PainelMotoristaState extends State<PainelMotorista> {
       return SizedBox(
         width: double.infinity, height: 48,
         child: FilledButton.icon(
-          onPressed: _loading ? null : () => _executarAcao(viagem, 'CARREGADO'),
+          onPressed: (_loading || _checandoGPS) ? null : () async {
+            bool noLocal = await _validarLocalizacao('CARREGAMENTO');
+            if (noLocal) {
+              _executarAcao(viagem, 'CARREGADO');
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ação Negada: Você precisa estar na Área de Carregamento ou no Posto de Triagem para confirmar a carga.'), backgroundColor: Colors.orange));
+            }
+          },
           style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00875A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           icon: const Icon(Icons.inventory_2_outlined, size: 18),
           label: const Text('Carga Recebida', style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
-      );
-    }
-    
-    if (statusStr == 'CARREGADO') {
-      return SizedBox(
-        width: double.infinity, height: 48,
-        child: FilledButton.icon(
-          onPressed: _loading ? null : () => _executarAcao(viagem, 'NA_FILA'),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00875A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-          icon: const Icon(Icons.location_on_outlined, size: 18),
-          label: const Text('Passar na PRF', style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       );
     }
@@ -687,47 +816,46 @@ class _PainelMotoristaState extends State<PainelMotorista> {
         ],
       );
     }
-
+    // === STATUS CARREGADO: O Radar assume o controle ===
+    if (statusStr == 'CARREGADO') {
+      return Container(
+        width: double.infinity, padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue.withOpacity(0.3))),
+        child: const Column(
+          children: [
+            Icon(Icons.radar, color: Colors.blue, size: 28),
+            SizedBox(height: 8),
+            Text('Siga Viagem', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Sua entrada na fila será registrada automaticamente pelo GPS ao passar pelo posto de triagem.', style: TextStyle(color: Colors.black54, fontSize: 13), textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+    // === STATUS CHAMADO: O Operador assume o controle ===
     if (statusStr == 'CHAMADO') {
       return Column(
         children: [
           Container(
             width: double.infinity, padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE6FCF5), 
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF00875A), width: 1.5)
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF00875A).withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF00875A).withOpacity(0.3))),
             child: const Column(
               children: [
-                Icon(Icons.phone_in_talk, color: Color(0xFF00875A), size: 24),
-                SizedBox(height: 6),
-                Text('É A SUA VEZ!', style: TextStyle(color: Color(0xFF00875A), fontWeight: FontWeight.bold, fontSize: 16)),
-                Text('Dirija-se à doca imediatamente', style: TextStyle(color: Color(0xFF00875A), fontSize: 13)),
+                Icon(Icons.warehouse, color: Color(0xFF00875A), size: 28),
+                SizedBox(height: 8),
+                Text('Dirija-se à Doca', style: TextStyle(color: Color(0xFF00875A), fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('Encoste o veículo. O operador do pátio confirmará sua chegada no sistema.', style: TextStyle(color: Colors.black54, fontSize: 13), textAlign: TextAlign.center),
               ],
             ),
           ),
-          SizedBox(
-            width: double.infinity, height: 48,
-            child: FilledButton.icon(
-              onPressed: _loading ? null : () => _executarAcao(viagem, 'EM_DESCARGA'),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF00875A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: const Text('Confirmar Chegada na Doca', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ),
           const SizedBox(height: 12),
+          // Mantém o botão de problema caso ele quebre o caminhão manobrando
           SizedBox(
             width: double.infinity, height: 48,
             child: OutlinedButton.icon(
               onPressed: _loading ? null : () => _executarAcao(viagem, 'QUEBRADO'),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFFA5252)), 
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
-              ),
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFFA5252)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               icon: const Icon(Icons.warning_amber_rounded, size: 18, color: Color(0xFFFA5252)),
-              label: const Text('Tive um problema / Pular vez', style: TextStyle(color: Color(0xFFFA5252), fontWeight: FontWeight.bold)),
+              label: const Text('Tive um problema', style: TextStyle(color: Color(0xFFFA5252), fontWeight: FontWeight.bold)),
             ),
           ),
         ],

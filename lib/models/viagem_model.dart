@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum StatusOperacional { PENDENTE, CARREGADO, NA_FILA, CHAMADO, EM_DESCARGA, QUEBRADO, CONCLUIDO }
+enum StatusOperacional { PENDENTE, CARREGADO, NA_FILA, CHAMADO, CHEGOU_DOCA, EM_DESCARGA, QUEBRADO, CONCLUIDO }
 
 class ViagemModel {
   final String id;
@@ -19,6 +19,7 @@ class ViagemModel {
   final DateTime? dhConclusao;
   final int? posicaoFila;
   final bool isImpossibilitado;
+
 
   ViagemModel({
     required this.id,

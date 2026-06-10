@@ -43,7 +43,9 @@ dependencies:
   latlong2: ^0.9.1
   firebase_auth: ^6.5.1
   provider: ^6.1.2
-
+  shared_preferences: ^2.2.2
+  workmanager: ^0.5.2
+  connectivity_plus: ^5.0.2 # Para verificar internet antes de sincronizar
 dev_dependencies:
   flutter_test:
     sdk: flutter

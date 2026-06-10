@@ -4,6 +4,7 @@ import '../../services/admin_service.dart';
 import '../../models/veiculo_model.dart';
 import '../../models/motorista_model.dart';
 import '../auth/login_screen.dart';
+import 'mapa_admin_screen.dart';
 
 class PainelAdmin extends StatefulWidget {
   const PainelAdmin({super.key});
@@ -20,7 +21,7 @@ class _PainelAdminState extends State<PainelAdmin> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -335,6 +336,7 @@ class _PainelAdminState extends State<PainelAdmin> with SingleTickerProviderStat
           tabs: const [
             Tab(icon: Icon(Icons.local_shipping), text: 'Frota'),
             Tab(icon: Icon(Icons.people), text: 'Motoristas'),
+            Tab(icon: Icon(Icons.map_outlined), text: 'Geofence')          
           ],
         ),
       ),
@@ -345,6 +347,7 @@ class _PainelAdminState extends State<PainelAdmin> with SingleTickerProviderStat
             children: [
               _buildAbaVeiculos(),
               _buildAbaMotoristas(),
+              const MapaAdminScreen(),
             ],
           ),
           if (_loading)

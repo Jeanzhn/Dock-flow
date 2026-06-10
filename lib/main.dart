@@ -7,9 +7,23 @@ import 'screens/operador/painel_operador.dart';
 import 'screens/administrativo/painel_admin.dart';
 import 'firebase_options_dev.dart' as dev;
 import 'firebase_options_prod.dart' as prod;
+import 'package:workmanager/workmanager.dart';
+import 'services/sync_service.dart';
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    // Essa função roda em segundo plano mesmo com o app fechado!
+    await SyncService.sincronizarDadosPendentes();
+    return Future.value(true);
+  });
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Inicializa o processo em background
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+  Workmanager().registerPeriodicTask("1", "syncLogsOffline", frequency: const Duration(minutes: 15));
 
   // Lê a tag ENVIRONMENT passada pelo terminal (o padrão caso não passe nada será dev)
   const String env = String.fromEnvironment('ENVIRONMENT', defaultValue: 'dev');
