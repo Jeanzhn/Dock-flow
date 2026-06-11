@@ -24,15 +24,49 @@ class AdminService {
       s.docs.map((d) => VeiculoModel.fromFirestore(d.data(), d.id)).toList()
     );
   }
+  
+  // 1. Editar Placa do Veículo (Atualiza também a permissão dos motoristas)
+  Future<void> editarVeiculo(String placaAntiga, String novaPlaca) async {
+    final db = FirebaseFirestore.instance;
+    
+    // Atualiza a placa na coleção de veículos
+    final veiculoQuery = await db.collection('veiculos').where('placa', isEqualTo: placaAntiga).get();
+    if (veiculoQuery.docs.isNotEmpty) {
+      await veiculoQuery.docs.first.reference.update({'placa': novaPlaca});
+    }
 
-  // ==========================================
-  // GESTÃO DE MOTORISTAS (COM CRIAÇÃO DE LOGIN)
-  // ==========================================
+    // Varre os motoristas e atualiza a placa antiga pela nova na lista de permitidos
+    final motoristasQuery = await db.collection('motoristas').where('veiculosPermitidos', arrayContains: placaAntiga).get();
+    for (var doc in motoristasQuery.docs) {
+      List<dynamic> veiculos = doc.data()['veiculosPermitidos'] ?? [];
+      veiculos.remove(placaAntiga);
+      veiculos.add(novaPlaca);
+      await doc.reference.update({'veiculosPermitidos': veiculos});
+    }
+  }
+
+  // 2. Editar Informações do Motorista (Nome e CPF)
+  Future<void> editarInfoMotorista(String id, String novoNome, String novoCpf) async {
+    await FirebaseFirestore.instance.collection('motoristas').doc(id).update({
+      'nome': novoNome,
+      'cpf': novoCpf,
+    });
+  }
+
+  // 3. Remover Motorista
+  Future<void> alternarAcessoMotorista(String id, bool statusAtual) async {
+    // Se ele está ativo (true), vai virar inativo (false) e vice-versa.
+    await FirebaseFirestore.instance.collection('motoristas').doc(id).update({
+      'ativo': !statusAtual,
+    });
+  }
+
   Future<void> criarMotorista({
     required String nome,
     required String cpf,
     required List<String> veiculosIniciais,
   }) async {
+
     final cpfLimpo = cpf.replaceAll(RegExp(r'[^0-9]'), '');
     if (cpfLimpo.length != 11) throw Exception("CPF inválido. Digite os 11 números.");
     final ultimos4 = cpfLimpo.substring(7);
@@ -47,8 +81,6 @@ class AdminService {
         .replaceAll(RegExp(r'[úùû]'), 'u')
         .replaceAll(RegExp(r'ç'), 'c');
 
-    // 3. Gera as credenciais amigáveis
-    // Exemplo: joao1234@dockflow.com
     final emailGerado = '$primeiroNome$ultimos4@dockflow.com'; 
     final senhaGerada = '2026$ultimos4';
     // 2. Cria o usuário no Firebase Auth SEM deslogar o Admin
@@ -92,7 +124,7 @@ class AdminService {
 
   Stream<List<MotoristaModel>> streamMotoristas() {
     return _db.collection('motoristas').snapshots().map((s) => 
-      s.docs.map((d) => MotoristaModel.fromFirestore(d.data(), d.id)).toList()
+      s.docs.map((d) => MotoristaModel.fromMap(d.data(), d.id)).toList()
     );
   }
 

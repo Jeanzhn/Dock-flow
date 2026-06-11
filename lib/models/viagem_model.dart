@@ -50,7 +50,7 @@ class ViagemModel {
       'origem': origem,
       'destino': destino,
       'tipoCarga': tipoCarga,
-      'statusOperacional': statusOperacional.name, // Nome unificado
+      'status_operacional': statusOperacional.name, // Nome unificado
       'dhInicio': dhInicio != null ? Timestamp.fromDate(dhInicio!) : null,
       'dhCarregamento': dhCarregamento != null ? Timestamp.fromDate(dhCarregamento!) : null,
       'dhEntradaFila': dhEntradaFila != null ? Timestamp.fromDate(dhEntradaFila!) : null,
@@ -83,7 +83,7 @@ class ViagemModel {
       destino: dados['destino'] ?? 'Santana-AP',
       tipoCarga: dados['tipoCarga'] ?? '',
       statusOperacional: StatusOperacional.values.firstWhere(
-        (e) => e.name == (dados['statusOperacional'] ?? 'PENDENTE'),
+        (e) => e.name == (dados['status_operacional'] ?? 'PENDENTE'),
         orElse: () => StatusOperacional.PENDENTE,
       ),
       dhInicio: lerData('dhInicio'),

@@ -4,7 +4,7 @@ import '../../services/auth_service.dart';
 import '../operador/painel_operador.dart'; // Certifique-se de que o import do operador está correto
 import '../motorista/painel_motorista.dart';
 import '../administrativo/painel_admin.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -35,15 +35,34 @@ class _LoginScreenState extends State<LoginScreen> {
       // 1. Efetua o login no Firebase
       await _authService.signIn(_emailCtrl.text.trim(), _passCtrl.text);
       
-      // 2. Captura o usuário que acabou de logar
+      // 2. Captura o utilizador que acabou de logar
       final user = FirebaseAuth.instance.currentUser;
       
       if (user != null && mounted) {
         String email = user.email?.toLowerCase() ?? '';
         
-        // 3. ROTEAMENTO: Verifica se contém "operador" ou "docas" no e-mail para identificar operadores, ou se é o email específico do admin. O restante é motorista.
-        
-        // Verifica se é exatamente o email do administrador
+        // ===============================================
+        // 3. BARREIRA DE SEGURANÇA (SOFT DELETE)
+        // ===============================================
+        // Se NÃO for admin nem operador, é motorista. Vamos verificar o banco!
+        if (!email.endsWith('@admin.dockflow.com') && !email.endsWith('@operador.dockflow.com') && !email.endsWith('@docas.com')) {
+          final docMotorista = await FirebaseFirestore.instance.collection('motoristas').doc(user.uid).get();
+          
+          if (docMotorista.exists) {
+            final isAtivo = docMotorista.data()?['ativo'] ?? true;
+            
+            if (isAtivo == false) {
+              // Conta bloqueada pelo admin! Desloga o utilizador na hora.
+              await FirebaseAuth.instance.signOut();
+              setState(() => _error = 'Acesso bloqueado. Procure a administração.');
+              setState(() => _loading = false);
+              return; // Para a execução do código aqui e impede o roteamento
+            }
+          }
+        }
+        // ===============================================
+
+        // 4. ROTEAMENTO
         if (email.endsWith('@admin.dockflow.com')) {
           Navigator.pushReplacement(
             context,
@@ -62,6 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
+      // Se a palavra-passe ou o e-mail estiverem errados no Auth, cai aqui
       setState(() => _error = 'Email ou senha inválidos');
     } finally {
       if (mounted) setState(() => _loading = false);

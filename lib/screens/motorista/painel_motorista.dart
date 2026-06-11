@@ -54,6 +54,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
   @override
   void initState() {
     super.initState();
+    solicitarPermissoesGPS();
     _buscarPlacasDoMotorista();
     _baixarPontosDeControle();
 
@@ -80,10 +81,22 @@ class _PainelMotoristaState extends State<PainelMotorista> {
           PontoControleModel.fromFirestore(doc.data(), doc.id)
         ).toList();
       });
+
+      debugPrint('📍 DEBUG GEOFENCE: ${_pontosControle.length} cercas foram descarregadas para o telemóvel!');
+      if (mounted && _pontosControle.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('DEBUG: ${_pontosControle.length} Pontos de Triagem carregados no GPS!'), backgroundColor: Colors.purple));
+      }
     } catch (e) {
       debugPrint('Erro ao baixar geofences: $e');
     }
   }
+
+  Future<void> solicitarPermissoesGPS() async {
+  LocationPermission permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+}
 
   // VALIDADOR DE GEOFENCING (GPS)
   // ==========================================
@@ -134,10 +147,17 @@ class _PainelMotoristaState extends State<PainelMotorista> {
     }
   }
 
-  Future<void> _verificarGeofenceSilencioso(ViagemModel viagem) async {
+ Future<void> _verificarGeofenceSilencioso(ViagemModel viagem) async {
     if (viagem.statusOperacional == StatusOperacional.PENDENTE) return; // Só monitora depois de carregado
 
     try {
+      // BLINDAGEM: Verifica se o utilizador deu permissão ANTES de ligar o satélite
+      LocationPermission permissao = await Geolocator.checkPermission();
+      if (permissao == LocationPermission.denied || permissao == LocationPermission.deniedForever) {
+        debugPrint('Radar em pausa: O utilizador não deu permissão de GPS.');
+        return; // Sai da função sem gerar exceção
+      }
+
       Position posAtual = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       final distCalc = const Distance();
       final prefs = await SharedPreferences.getInstance();
@@ -153,8 +173,10 @@ class _PainelMotoristaState extends State<PainelMotorista> {
           if (estaDentro && !jaEntrouAntes) {
             // Gatilho de ENTER
             await prefs.setBool('entrou_triagem_${viagem.id}', true);
+            debugPrint('⚠️ RADAR: O camião acabou de ENTRAR fisicamente no raio da Triagem!');
           } else if (!estaDentro && jaEntrouAntes) {
             // Gatilho de EXIT (Estava dentro, agora está fora)
+            debugPrint('⚠️ RADAR: O camião SAIU da Triagem! A gravar ação offline...');
             await SyncService.salvarLogLocal(viagem.id, 'SAIU_TRIAGEM');
             await SyncService.sincronizarDadosPendentes(); // Tenta subir
             await prefs.remove('entrou_triagem_${viagem.id}'); // Limpa o estado
@@ -223,7 +245,7 @@ class _PainelMotoristaState extends State<PainelMotorista> {
       if (viagemExistente.docs.isNotEmpty) {
         bool temViagemAtiva = viagemExistente.docs.any((doc) {
           final dados = doc.data();
-          final status = dados['statusOperacional'] ?? dados['status_operacional'] ?? '';
+          final status = dados['status_operacional'] ?? dados['status_operacional'] ?? '';
           return status != 'CONCLUIDO';
         });
         

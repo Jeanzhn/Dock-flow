@@ -83,12 +83,14 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
           final emTransito = todasViagens.where((v) => v.statusOperacional == StatusOperacional.PENDENTE || v.statusOperacional == StatusOperacional.CARREGADO).toList();
           final quebrados = todasViagens.where((v) => v.statusOperacional == StatusOperacional.QUEBRADO).toList();
           final concluidos = todasViagens.where((v) => v.statusOperacional == StatusOperacional.CONCLUIDO).toList();
+          final chegouDoca = todasViagens.where((v) => v.statusOperacional == StatusOperacional.CHEGOU_DOCA).toList();
+
 
           // Ordenação FIFO da fila de espera por milissegundos
           filaAguardando.sort((a, b) => (a.posicaoFila ?? 0).compareTo(b.posicaoFila ?? 0));
 
           // Criamos uma lista unificada para a primeira aba mostrar quem aguarda e quem já foi chamado (separados visualmente)
-          final listaAbaFila = [...emDescarga, ...chamados, ...filaAguardando];
+          final listaAbaFila = [...emDescarga, ...chegouDoca, ...chamados, ...filaAguardando];
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,8 +193,8 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
         final viagem = viagens[index];
         final bool isChamado = viagem.statusOperacional == StatusOperacional.CHAMADO;
         
-        // Se o cara já foi chamado, não mostra número de posição na fila para fazer sentido operacional
-        final String textoPosicao = isChamado ? '--' : '#${index + 1}';
+        final bool mostrarNumero = viagem.statusOperacional == StatusOperacional.NA_FILA;
+        final String textoPosicao = mostrarNumero ? '#${index + 1}' : '--';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -375,7 +377,7 @@ class _PainelOperadorScreenState extends State<PainelOperador> with SingleTicker
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(viagem.motoristaNome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(viagem.motoristaEmail, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: const Color(0xFFE6FCF5), borderRadius: BorderRadius.circular(6)),

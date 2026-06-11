@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:geolocator/geolocator.dart'; // Necessário para o Radar em background
+import 'package:shared_preferences/shared_preferences.dart'; // Necessário para recuperar a viagem
+
 import 'screens/auth/login_screen.dart';
 import 'screens/motorista/painel_motorista.dart';
 import 'screens/operador/painel_operador.dart';
 import 'screens/administrativo/painel_admin.dart';
+import 'services/sync_service.dart';
 import 'firebase_options_dev.dart' as dev;
 import 'firebase_options_prod.dart' as prod;
-import 'package:workmanager/workmanager.dart';
-import 'services/sync_service.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -22,8 +25,30 @@ void callbackDispatcher() {
       );
     }
     
-    // Executa a lógica silenciosa
+    // 1. Executa a sincronização offline
     await SyncService.sincronizarDadosPendentes();
+
+    // 2. Aciona o Radar Silencioso (Geofencing via GPS)
+    try {
+      Position posicaoAtual = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+      
+      final prefs = await SharedPreferences.getInstance();
+      final viagemId = prefs.getString('viagem_atual_id'); 
+      
+      // Se houver uma viagem em andamento salva no aparelho, passa no radar
+      if (viagemId != null && viagemId.isNotEmpty) {
+        await SyncService.verificarGeofenceDoca(
+          viagemId, 
+          posicaoAtual.latitude, 
+          posicaoAtual.longitude
+        );
+      }
+    } catch (e) {
+      debugPrint('Erro ao acionar o GPS no background: $e');
+    }
+
     return Future.value(true);
   });
 }
@@ -64,6 +89,7 @@ void main() async {
   debugPrint('==== 8. DESENHANDO A TELA (RUNAPP) ====');
   runApp(const DockFlowApp());
 }
+
 class DockFlowApp extends StatelessWidget {
   const DockFlowApp({super.key});
 

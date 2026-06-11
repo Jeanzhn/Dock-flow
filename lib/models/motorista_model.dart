@@ -26,14 +26,14 @@ class MotoristaModel {
     };
   }
 
-  factory MotoristaModel.fromFirestore(Map<String, dynamic> dados, String docId) {
+  factory MotoristaModel.fromMap(Map<String, dynamic> map, String id) {
     return MotoristaModel(
-      id: docId,
-      nome: dados['nome'] ?? '',
-      cpf: dados['cpf'] ?? '',
-      emailAcesso: dados['emailAcesso'] ?? '',
-      veiculosPermitidos: List<String>.from(dados['veiculosPermitidos'] ?? []),
-      ativo: dados['ativo'] ?? true,
+      id: id,
+      nome: map['nome'] ?? '',
+      cpf: map['cpf'] ?? '',
+      emailAcesso: map['emailAcesso'] ?? '',
+      veiculosPermitidos: List<String>.from(map['veiculosPermitidos'] ?? []),
+      ativo: map['ativo'] ?? true, // <--- NOVO CAMPO AQUI (Se não existir no banco, assume true)
     );
   }
 }

@@ -53,9 +53,8 @@ class ViagemService {
                                dados['motorista_email'] ?? 
                                dados['email'] ?? '';
 
-          // Pega o status testando todas as variações de chaves possíveis
-          final statusTexto = dados['statusOperacional'] ?? 
-                              dados['status_operacional'] ?? 'PENDENTE';
+          // Pega o status do Firebase
+          final statusTexto = dados['status_operacional'] ?? 'PENDENTE';
                               
           final statusLimpo = statusTexto.toString().toUpperCase().replaceAll('_', '');
 
@@ -74,7 +73,6 @@ class ViagemService {
   }
 
   // Cria a nova viagem no banco
-  // CORREÇÃO: Cria o documento, captura o ID gerado pelo Firebase e salva tudo junto
   Future<void> criarViagem(ViagemModel viagem) async {
     final docRef = _col.doc(); // Cria uma referência vazia para gerar o ID primeiro
     
@@ -93,26 +91,22 @@ class ViagemService {
     await docRef.set(viagemComId.toMap()); // Salva usando o .set() com o ID fixado
   }
 
-  // READICIONADO E CORRIGIDO: Método que estava faltando e deixando o painel vermelho!
+  // Atualiza Status Genérico
   Future<void> atualizarStatus(
     String id,
     StatusOperacional novoStatus, {
     Map<String, dynamic> extras = const {},
   }) async {
-    // Cria um mapa mutável para podermos tratar os dados
     final Map<String, dynamic> dadosParaAtualizar = Map.from(extras);
 
-    // Converte automaticamente qualquer DateTime puro enviado em Timestamp do Firebase
     dadosParaAtualizar.forEach((chave, valor) {
       if (valor is DateTime) {
         dadosParaAtualizar[chave] = Timestamp.fromDate(valor);
       }
     });
 
-    // Atualiza o Firestore com segurança
     await _col.doc(id).update({
-      'statusOperacional': novoStatus.name,
-      'status_operacional': novoStatus.name, // Mantém compatibilidade
+      'status_operacional': novoStatus.name, // Usa apenas a chave em snake_case correta
       ...dadosParaAtualizar,
     });
   }
@@ -121,19 +115,15 @@ class ViagemService {
   Future<void> entrarNaFila(String viagemId) async {
     final now = DateTime.now();
     await _col.doc(viagemId).update({
-      'statusOperacional': StatusOperacional.NA_FILA.name,
       'status_operacional': StatusOperacional.NA_FILA.name,
       'dhEntradaFila': Timestamp.fromDate(now),
-      'dh_entrada_fila': Timestamp.fromDate(now),
       'posicaoFila': now.millisecondsSinceEpoch,
-      'posicao_fila': now.millisecondsSinceEpoch,
     });
   }
 
   // Operador chama o motorista para a doca
   Future<void> chamarMotorista(String viagemId) async {
     await _col.doc(viagemId).update({
-      'statusOperacional': StatusOperacional.CHAMADO.name,
       'status_operacional': StatusOperacional.CHAMADO.name,
       'dhChamada': Timestamp.fromDate(DateTime.now()),
     });
@@ -142,7 +132,6 @@ class ViagemService {
   // Reporta problema mecânico
   Future<void> reportarQuebra(String viagemId) async {
     await _col.doc(viagemId).update({
-      'statusOperacional': StatusOperacional.QUEBRADO.name,
       'status_operacional': StatusOperacional.QUEBRADO.name,
       'isImpossibilitado': true,
     });
@@ -151,13 +140,12 @@ class ViagemService {
   // Finaliza a manutenção e retorna à fila
   Future<void> consertarVeiculo(String viagemId) async {
     await _col.doc(viagemId).update({
-      'statusOperacional': StatusOperacional.NA_FILA.name,
       'status_operacional': StatusOperacional.NA_FILA.name,
       'isImpossibilitado': false,
     });
   }
 
-  // Busca o histórico real de todas as viagens CONCLUÍDAS deste motorista
+  // Busca o histórico real de todas as viagens CONCLUÍDAS
   Stream<List<ViagemModel>> streamHistoricoConcluido(String email) {
     return _col.snapshots().map((s) {
       if (s.docs.isEmpty) return [];
@@ -166,11 +154,9 @@ class ViagemService {
         final emailDoBanco = v.motoristaEmail.trim().toLowerCase();
         final statusStr = v.statusOperacional.toString().split('.').last.toUpperCase();
         
-        // Só entram no histórico as viagens que pertencem ao motorista E estão CONCLUÍDAS
         return emailDoBanco == email.trim().toLowerCase() && statusStr == 'CONCLUIDO';
       }).toList();
 
-      // Ordena para que a recém-concluída apareça sempre no topo (Decrescente)
       lista.sort((a, b) {
         final dataA = a.dhConclusao ?? DateTime.fromMillisecondsSinceEpoch(0);
         final dataB = b.dhConclusao ?? DateTime.fromMillisecondsSinceEpoch(0);
